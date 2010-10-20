@@ -8,8 +8,9 @@ scanned for inline comments.}
 extract.docs.setClass(doc.link)
 }
 \arguments{
-  \item{doc.link}{
-}
+  \item{doc.link}{DocLink object as created by \code{\link{extract.file.parse}}.
+Note that \code{source} statements are \emph{ignored} when scanning for
+class definitions.}
 }
 \details{Extraction of S4 class documentation is currently limited to expressions
 within the source code which have first line starting with
@@ -30,7 +31,7 @@ written. It is given a vanilla content if there are no specific
 \code{##details<<} documentation chunks.}
 
 
-\author{Toby Dylan Hocking <toby.hocking@inria.fr>, Keith Ponting <k.ponting@aurix.com>}
+\author{Inlinedocs development team <inlinedocs-support@lists.r-forge.r-project.org>}
 
 
 

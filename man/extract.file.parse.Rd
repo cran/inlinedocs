@@ -7,11 +7,12 @@ the default description for that chunk. The analysis also looks for
 S4 class "setClass" calls and R.oo setConstructorS3 and setMethodS3
 calls in order to link the documentation of those properly.}
 \usage{
-extract.file.parse(code.file)
+extract.file.parse(code)
 }
 \arguments{
-  \item{code.file}{
-}
+  \item{code}{Lines of R source code in a character vector - note that any
+nested \code{source} statements are \emph{ignored} when scanning
+for class definitions.}
 }
 \details{If the definition chunk does not contain a
 description, any immediately preceding sequence consecutive
@@ -36,7 +37,7 @@ first defining instances, subsequent definitions of that generic
 also link back to the first defining instance.}
 \value{Returns an invisible list of .DocLink objects.}
 
-\author{Toby Dylan Hocking <toby.hocking@inria.fr>, Keith Ponting <k.ponting@aurix.com>}
+\author{Inlinedocs development team <inlinedocs-support@lists.r-forge.r-project.org>}
 
 
 

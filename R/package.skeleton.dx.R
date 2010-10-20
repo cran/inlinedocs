@@ -1,20 +1,29 @@
-### Prefix for code comments used with grep and gsub.
-prefix <- "^### "
-
-decomment <- function
-### Remove comment prefix and join lines of code to form a
-### documentation string.
-(comments
-### Character vector of prefixed comment lines.
- ){
-  paste(gsub(prefix,"",comments),collapse="\n")
-### String without prefixes or newlines.
-}
-
 ### Necessary fields in DESCRIPTION, otherwise error.
 fields <- c("Package","Maintainer","Author","Version",
             "License","Title","Description")
-### Default DESCRIPTION, written if it doesn't exist.
+
+`inlinedocExample<-` <- function (
+	### Attaching example code to attribute 'ex'.
+	f			##<< the function, to which to attach code for section 'examples' in documentation
+	, value		##<< the example code, usually the body of a function (see example)
+) {
+	# see parsers.R examples.in.attr
+	attr (f, "ex") <- value
+	f
+}
+inlinedocExample(`inlinedocExample<-`) <- function(){
+	### Simple Hello-World function.
+	helloWorld <- function(){ cat('Hello World!\n')}
+	inlinedocExample(helloWorld) <- function(){
+		# all text including comments inside this block 
+		# will go to the examples section of 
+		# function helloWorld
+		helloWorld()	# prints Hello World
+	}	
+}
+		
+### Default DESCRIPTION, written if it doesn't exist.  TODO, PhG:
+### start with reasonable values here!
 empty.description <- matrix("",ncol=length(fields),dimnames=list(NULL,fields))
 
 package.skeleton.dx <- function # Package skeleton deluxe
@@ -28,21 +37,38 @@ package.skeleton.dx <- function # Package skeleton deluxe
 ### package directory where the DESCRIPTION file lives. Your code
 ### should be in pkgdir/R. We will setwd to pkgdir/R for the duration
 ### of the function, then switch back to where you were previously.
- code_files=NULL,
-### Character vector with the names of the R code files, to be passed
-### to package.skeleton, and also inspected for inline
-### documentation. NULL means all files ending in .R.
- check=""
-### Value indicating whether or not to check the package after
-### documentation is built. Anything other than "" (the default) will
-### check the package. "noex" means check the package without running
-### examples, only tests (useful for debugging if your tests/examples
-### take a long time).
+ parsers=NULL,
+### List of Parser functions, which will be applied in sequence to
+### extract documentation from your code. Default NULL means to first
+### search for a definition in the variable "parsers" in
+### pkgdir/R/.inlinedocs.R, if that file exists. If not, we use the
+### list defined in options("inlinedocs.parsers"), if that is
+### defined. If not, we use the package global default in the variable
+### default.parsers.
+ # PhG: added to support NAMESPACE creation!
+ namespace = FALSE,
+### a logical indicating whether a NAMESPACE file should be generated
+### for this package. If \code{TRUE}, all objects whose name starts with
+### a letter, plus all S4 methods and classes are exported.
+ ...
+### Parameters to pass to Parser functions.
  ){
+  ##alias<< inlinedocs	 
+	 
   chdir <- file.path(pkgdir,"R")
+  if(!file.exists(chdir))stop("need pkgdir/R, tried ",chdir)
   old.wd <- setwd(chdir)
   on.exit(setwd(old.wd))
-
+  # PhG: R allows for specific code to be in /unix, or /windows subdirectories
+  # but apparently, inlinedocs does not support this. I think it is fair to
+  # stop here with an explicit error message if at least one of /unix or
+  # /windows subdirectory is found!
+  # file_test(-d, ...) does the job, but I don't want to add a dependency on
+  # package 'utils", where it lives. So, I prefer using file.info()
+  if (isTRUE(file.info("unix")$isdir) || isTRUE(file.info("windows")$isdir))
+    stop("Platform-specific code in ./R/unix, or ./R/windows is not supported")
+  
+  ## if no DESCRIPTION, make one and exit.
   descfile <- file.path("..","DESCRIPTION")
   if(!file.exists(descfile)){
     write.dcf(empty.description,descfile)
@@ -51,54 +77,136 @@ package.skeleton.dx <- function # Package skeleton deluxe
 
   ## Read description and check for errors
   desc <- read.dcf(descfile)
-  for(f in fields){
-    if(! f %in% colnames(desc))stop("Need ",f," in ",descfile)
-    if(desc[,f]=="")stop("Need a value for ",f," in ",descfile)
-  }
+  if(any(f <- !sapply(fields,is.element,colnames(desc))))
+    stop("Need ", paste(names(f)[f], collapse = ", "), " in ", descfile)
+    #PhG: corrected from stop("Need ",names(f)[f]," in ",descfile)
+  if(any(f <- sapply(fields,function(f)desc[,f]=="")))
+    stop("Need a value for ", paste(names(f)[f], collapse = ", "),
+         " in ", descfile)
+    #PhG: corrected from stop("Need a value for ",names(f)[f]," in ",descfile)
 
   ## Load necessary packages before loading pkg code
   if("Depends" %in% colnames(desc)){
     required <- strsplit(desc[,"Depends"],split=",")[[1]]
-    ## This may need some refining, basically I just tried to take the
-    ## first word from each vector element, stripping of whitespace in
-    ## front and anything after:
-    pkgnames <- gsub("\\W*(\\w+)\\b.*","\\1",required)
-    for(pkg in pkgnames)try(library(pkg,character.only=TRUE),TRUE)
+    # PhG: for packages with NAMESPACE, dependencies are also listes in the
+    # Imports field!
+  } else required <- character(0)
+  # PhG: packages listed in Imports field are not supposed to be attached to the
+  # search path when a package with NAMESPACE is loaded, only the namespace is
+  # loaded. However, the code here is not loaded as it should be, and we need to
+  # load also these Import(ed) packages to get correct results in the present
+  # case (to be checked with most complex cases!)
+  if ("Imports" %in% colnames(desc))
+    required <- c(required, strsplit(desc[, "Imports"], split = ",")[[1]])
+  ## This may need some refining, basically I just tried to take the
+  ## first word from each vector element, stripping of whitespace in
+  ## front and anything after:
+  #pkgnames <- gsub("\\W*(\\w+)\\b.*","\\1",required)
+  # PhG: the previous line is wrong: it does not work with package names
+  # like R.oo... Extract from Writing R Extensions manual:
+  # "The `Package' and `Version' fields give the name and the version of the
+  # package, respectively. The name should consist of letters, numbers, and the
+  # dot character and start with a letter." 
+  # Consequently, I propose:
+  pkgnames <- gsub("\\W*([a-zA-Z][a-zA-Z0-9.]*)\\b.*", "\\1", required)
+  # PhG: We need to eliminate 'R' from the list!
+  pkgnames <- pkgnames[pkgnames != "R"]
+  # PhG: if we create a namespace, we need to keep this list for further use
+  if (isTRUE(namespace)) allpkgs <- pkgnames
+  # PhG: We eliminate also from the list the packages that are already loaded
+  pkgnames <- pkgnames[!sprintf("package:%s",pkgnames) %in% search()]
+  # PhG: according to Writing R Extensions manual, a package name can occur
+  # several times in Depends
+  pkgnames <- unique(pkgnames)
+  if (length(pkgnames)) {
+    # PhG: A civilized function returns the system in the same state it was
+    # before => detach loaded packages at the end!
+    on.exit(try(for (pkg in pkgnames) detach(paste("package", pkg, sep = ":"),
+        unload = TRUE, character.only = TRUE), silent = TRUE), add = TRUE)
+    # PhG: Shouldn't we need to check that packages are loaded and shouldn't
+    # we exit with an explicit error message if not? Note: we don't use version
+    # information here. That means we may well load wrong version of the
+    # packages... and that is NOT detected as an error!
+    #for(pkg in pkgnames)try(library(pkg,character.only=TRUE),silent=TRUE)
+    pkgmissing <- character(0)
+    for (pkg in pkgnames) {
+        res <- try(library(pkg, character.only = TRUE), silent = TRUE)
+        if (inherits(res, "try-error"))
+            pkgmissing <- c(pkgmissing, pkg)
+    }
+    if (length(pkgmissing))
+        stop("Need missing package(s): ", paste(pkgmissing, collapse = ", "))
   }
 
-  ## extract docs from each file
-  if(is.null(code_files))code_files <- Sys.glob("*.R")
-  docs <- list()
-  for(cf in code_files){
-    L <- extract.docs.file(cf,check!="noex")
-    docs <- c(docs,L)
-  }
+  ## Essentially inlinedocs is this function, package.skeleton.dx,
+  ## that turn R/*.R, tests/*.R, and DESCRIPTION files into Rd
+  # PhG: this is tests/*.R, not test/*.R. Also, it is a bit ennoying to mix
+  # examples and tests in tests/*.R... It means that your 'tests'/'examples'
+  # will be run twice! Moreover, adding something to 'tests' causes a large
+  # overhead in compiling R packages on Mac OS X. For packages without C or
+  # FORTRAN code to compile (like those targetted by inlinedocs), it is
+  # easy to compile the packages using R CMD build on a Mac without any other
+  # addition... In case there is something in /tests, one has to install almost
+  # 2Gb of latest version of Xtools, downloaded on Mac web site after login
+  # (Gaps!). So, if one could avoid this painfull task, it would be wonderful!
+  # My suggestion would be to place example code in the /ex subdirtectory of the
+  # source of the package...
+  ## files. This is done by parsing them and making a list called
+  ## "docs" that summarizes them. This list is then used to edit the
+  ## Rd files output by package.skeleton and produce the final Rd
+  ## files. The old way of creating the docs list is rather
+  ## monolithic, and for maintenance purposes I would like to begin
+  ## modularization of this process. What is the best way to do this?
+  ## I propose that package.skeleton.dx() starts docs as an empty
+  ## list, then parses the concatenated R files as "objs," reads their
+  ## text as "code," reads the package description as "desc," then
+  ## passes these to a list of functions that will sequentially add
+  ## things to docs. This will make extension of inlinedocs quite
+  ## easy, since all you would need to do is write a new parser
+  ## function and add it to the list.
 
-  ## Fill in author from DESCRIPTION and titles if unspecified
-  for(i in names(docs)){
-    if(! 'author' %in% names(docs[[i]]))
-      docs[[i]]$author <- desc[,"Maintainer"]
-    if(! 'title' %in% names(docs[[i]]))
-      docs[[i]]$title <- gsub("[._]"," ",i)
-    docs[[i]]$format <- ""
+  ## for the parser list, first try reading package-specific
+  ## configuration file
+  if(is.null(parsers))parsers <- tryCatch({
+    cfg <- new.env()
+    sys.source(cfile <- ".inlinedocs.R",cfg)
+    L <- cfg$parsers
+    if(!is.null(L))cat("Using parsers in ",cfile,"\n",sep="")
+    L
+  },error=function(e)NULL)
+  ## then try the global options()
+  opt <- "inlinedocs.parsers"
+  if(is.null(parsers)&&!is.null(parsers <- getOption(opt))){
+    cat("Using parsers in option ",opt,"\n",sep="")
   }
-  ##browser()
-
-  ## Make -package Rd file
-  name <- desc[,"Package"]
-  in.details <- setdiff(colnames(desc),"Description")
-  details <- paste(paste(in.details,": \\tab ",desc[,in.details],"\\cr",sep=""),
-                   collapse="\n")
-  docs[[paste(name,"-package",sep="")]] <-
-    list(title=desc[,"Title"],
-         description=desc[,"Description"],
-         `tabular{ll}`=details,
-         author=desc[,"Maintainer"])
+  ## if nothing configured, just use the pkg default
+  if(is.null(parsers))parsers <- default.parsers
+  
+  ## concatenate code files and parse them
+  # PhG: in Writing R Extensions manuals, source code in /R subdirectory can
+  # have .R, .S, .q, .r, or .s extension. However, it makes sense to restrict
+  # this to .R only for inlinedocs, but a clear indication is required in the
+  # man page!
+  code_files <- if(!"Collate"%in%colnames(desc))Sys.glob("*.R")
+  else strsplit(gsub("\\s+"," ",desc[,"Collate"]),split=" ")[[1]]
+  # PhG: one must consider a potential Encoding field in DESCRIPTION file!
+  # which is used also for .R files according to Writing R Extensions
+  if ("Encoding" %in% colnames(desc)) {
+    oEnc <- options(encoding = desc[1, "Encoding"])$encoding
+    on.exit(options(encoding = oEnc), add = TRUE)
+  }
+  code <- do.call(c,lapply(code_files,readLines))
+  
+  docs <- apply.parsers(code,parsers,verbose=TRUE,desc=desc)
 
   ## Make package skeleton and edit Rd files (eventually just don't
   ## use package.skeleton at all?)
+  name <- desc[,"Package"]
   unlink(name,rec=TRUE)
-  package.skeleton(name,code_files=code_files)
+  # PhG: added namespace argument to package.skeleton()
+  # twutz: addedd suppressWarnings around package.skeleton, 
+  # because I always got the warning that the package does not exist
+  suppressWarnings(package.skeleton(name,code_files=code_files, namespace = isTRUE(namespace)))
   cat("Modifying files automatically generated by package.skeleton:\n")
   ## documentation of generics may be duplicated among source files.
   dup.names <- duplicated(names(docs))
@@ -107,16 +215,69 @@ package.skeleton.dx <- function # Package skeleton deluxe
   }
   for(N in unique(names(docs))) modify.Rd.file(N,name,docs)
   file.copy(file.path(name,'man'),"..",rec=TRUE)
-  unlink(name,rec=TRUE)
-
-  if(check!=""){
-    Rdir <- setwd(file.path("..",".."))
-    cdir <- basename(dirname(Rdir))
-    system(paste("R CMD check",cdir))
+  # PhG: copy NAMESPACE file back
+  if (isTRUE(namespace)) {
+    # PhG: package.skeleton() does not add import() statement, but here the
+    # philosophy is to get a fully compilable package, which is not the
+    # case at this stage with a NAMESPACE. So, we add all packages listed
+    # in Depends and Imports fields of the DESCRIPTION file in an import()
+    # statement in the NAMESPACE
+    nmspFile <- file.path("..", "NAMESPACE")
+    cat("import(", paste(allpkgs, collapse = ", "), ")\n\n", sep = "",
+        file = nmspFile) 
+    # PhG: append the content of the NAMESPACE file generated by
+    # package.skeleton()
+    file.append(nmspFile, file.path(name,'NAMESPACE'))
+    # PhG: we also have to export S3 methods explictly in the NAMESPACE
+    cat("\n", file = nmspFile, append = TRUE)
+    for (N in unique(names(docs))) {
+        d <- docs[[N]]
+        if (!is.null(d$s3method))
+            cat('S3method("', d$s3method[1], '", "', d$s3method[2], '")\n',
+                sep = "", file = nmspFile, append = TRUE)
+    }
   }
-  ## rebuild examples if we didn't test them:
-  if(check=="noex")package.skeleton.dx(pkgdir,code_files,"")
+  
+  unlink(name,rec=TRUE)
 }
+inlinedocExample(package.skeleton.dx) <- function(){
+  library(inlinedocs)
+
+  owd <- setwd(tempdir())
+  
+  ## get the path to the silly example package that is provided with
+  ## package inlinedocs
+  testPackagePath=file.path( system.file(package="inlinedocs"),"silly" )
+  ## copy example project to the current unlocked workspace that can
+  ## be modified
+  file.copy(testPackagePath,".",recursive=TRUE)
+  
+  ## generate documentation rd-Files for this package
+  package.skeleton.dx("silly")
+  
+  ## display source file and the generated Rd file  
+  file.show( c(file.path("silly","R","silly.R"),
+               file.path("silly","man","silly.example.Rd") ),
+            header=c("source","rd") )
+
+  ## check the package to see if generated documentation passes
+  ## without WARNINGs
+  cmd <- sprintf("%s CMD check silly",file.path(R.home("bin"), "R"))
+  print(cmd)
+  checkLines <- system(cmd,intern=TRUE)
+  warnLines <- grep("WARNING",checkLines,value=TRUE)
+  if(length(warnLines)>0){
+    print(warnLines)
+    stop("WARNING encountered in package check!")
+  }
+  
+  ## cleanup: remove the test package from current workspace again
+  unlink("silly",recursive=TRUE)
+  setwd(owd)
+}
+
+
+
 
 modify.Rd.file <- function
 ### Add inline documentation from comments to an Rd file
@@ -128,8 +289,20 @@ modify.Rd.file <- function
  docs
 ### Named list of documentation in extracted comments.
  ){
-  fb <- paste(N,".Rd",sep="")
+  # PhG: for functions like 'obj<-', package.skeleton creates files like 'obj_-'
+  # => rework names the same way, i.e., using the same function from utils package
+  Nme <- utils:::.fixPackageFileNames(N)
+  fb <- paste(Nme,".Rd",sep="")
+  ## For some functions, such as `[[.object`, package.skeleton (as used
+  ## within this package but not when used standalone) seems to generate
+  ## with a preceding z ("z[[.object.Rd"), so the z form is tested for and
+  ## used if it exists and the first does not.
+  zfb <- paste("z",Nme,".Rd",sep="")
   f <- file.path(pkg,'man',fb)
+  if ( (!file.exists(f)) && file.exists(file.path(pkg,'man',zfb)) ){
+    fb <- zfb
+    f <- file.path(pkg,'man',zfb)
+  }
   ## If there are no significant docs in the comments then the object
   ## should still be documented, by writing the file by hand in the
   ## man directory. This will write a blank Rd file if none exists, so
@@ -154,6 +327,16 @@ modify.Rd.file <- function
     d[["alias"]] <- paste(paste(N,"}\n\\alias{",sep=""),
                             d[["alias"]],sep="")
   }
+
+  # PhG: in the special case of custom operators like %....%, we must protect
+  # these strings in name, alias and usage (at least)! Otherwise, bad things
+  # happen with these strings: (1) usage entry is cut out, because confused
+  # with comments, and % are escaped in name and alias!
+  if (grepl("^%.+%$", N)) {
+    Nmask <- gsub("%", "---percent---", N)
+    # Replace any occurence of N by Nmask
+    dlines <- gsub(N, Nmask, dlines, fixed = TRUE)
+  } else Nmask <- NULL
 
   ## cut out all comments {} interferes with regex matching
   comments <- grep("^[%~]",dlines)
@@ -192,9 +375,17 @@ modify.Rd.file <- function
   ## modifies those % symbols which follow something other than %.
   ## (a more complicated version would attempt to do so only within strings.)
   dlines <- gsub("([^%])%","\\1\\\\%",dlines,perl=TRUE)
+  
+  # PhG: now restore masked function name, if any (case of %....% operators)
+  if (!is.null(Nmask))
+    dlines <- gsub(Nmask, N, dlines, fixed = TRUE)
+  
   ## Find and replace based on data in d
   txt <- paste(dlines,collapse="\n")
   for(torep in names(d)){
+    if ( "s3method" == torep ){         # s3method is a flag handled later
+      next
+    }
     cat(" ",torep,sep="")
     FIND1 <- gsub("\\\\","\\\\\\\\",torep)
     FIND <- paste(gsub("([{}])","\\\\\\1",FIND1),"[{][^}]*[}]",sep="")
@@ -230,8 +421,37 @@ modify.Rd.file <- function
   m <- regexpr("usage[{][^}]*[}]",txt)
   Mend <- m+attr(m,"match.length")
   utxt <- substr(txt,m,Mend)
-  if(length(grep("usage[{]data",utxt)))
+  if(length(grep("usage[{]data",utxt))){
      utxt <- gsub("data[(]([^)]*)[)]","\\1",utxt)
+   }
+  
+  ## fix \method version if s3method
+  if ( !is.null(d$s3method) ){
+    pat <- paste(d$s3method,collapse=".")
+    rep <- paste("\\method{xx",d$s3method[1],"}{",d$s3method[2],"}",sep="")
+    utxt <- gsub(pat,rep,utxt,fixed=TRUE)
+    
+    # PhG: there is the special case of generic<-.obj(x, ..., value) to rewrite
+    # \method{generic}{obj}(x, ...) <- value
+    if (grepl("<-$", d$s3method[1])) {
+        # 1) replace {generic<-} by {generic}
+        utxt <- sub("<-[}]", "}", utxt)
+        # 2) replace ..., value) by ...) <- value
+        utxt <- sub(", *([^),]+)[)]", ") <- \\1", utxt)
+    }
+  } else {
+    # PhG: in case we have fun<-(x, ..., value), we must rewrite it
+    # as fun(x, ...) <- value
+    if (grepl("<-$", N)) {
+        utxt <- sub("<-[(](.+), ([^,)]+)[)]",
+            "(\\1) <- \\2", utxt)
+    }
+    # PhG: this is for special functions %...% which should write x %...% y
+    if (grepl("^%.*%$", N)) {
+        utxt <- sub("(%.*%)[(]([^,]+), ([^)]+)[)]",
+            "\\2 \\1 \\3", utxt) 
+    }
+  }
   ## add another backslash due to bug in package.skeleton
   ## but only if not before % character due to another bug if % in usage
   ## arguments - see above
@@ -241,568 +461,13 @@ modify.Rd.file <- function
                sep="")
   ## delete empty sections to suppress warnings in R CMD check
   txt <- gsub("\\\\[a-z]+[{]\\W*[}]","",txt)
+  if ( !is.null(d$s3method) ){
+    ## and now remove the xx inserted above to prevent \method{[[}{...} falling
+    ## foul of the above replacement!
+    txt <- gsub("\\\\method{xx","\\method{",txt,fixed=TRUE)
+  }
   ## This doesn't work if there are quotes in the default values:
   ## gsub(",",paste("\n",paste(rep(" ",l=nchar(N)-1),collapse="")),utxt)
   cat(txt,file=f)
   cat("\n")
-}
-
-extract.docs.file <- function # Extract documentation from a file
-### Parse an R code file and extract inline documentation from
-### comments around each function.
-(code.file,
-### The R code file to parse.
- write.examples=TRUE
-### Gather examples from test files?
- ){
-  parsed <- extract.file.parse(code.file)
-  e <- new.env()
-  old <- options(keep.source.pkgs=TRUE)
-  r <- try(sys.source(code.file,e),TRUE)
-  if(class(r)=="try-error")
-    stop("source ",code.file," failed with error:\n",r)
-  options(old)
-  objs <- sapply(ls(e),get,e,simplify=FALSE)
-  extract.docs.try <- function(o,on)
-    {
-      ## Note: we could use parsed information here too, but that
-      ## would produce different results for setMethodS3 etc.
-      doc <- if(!is.null(attr(o,"source"))){
-        tdoc <- extract.docs.fun(o,on)
-        if(write.examples){ ## do not get examples from test files.
-          tfile <- file.path("..","tests",paste(on,".R",sep=""))
-          if(file.exists(tfile))
-            tdoc[["examples"]] <- paste(readLines(tfile),collapse="\n")
-        }
-        tdoc
-      }else list()
-      if ( !is.null(parsed[[on]]) ){
-        if ( !is.na(parsed[[on]]@code[1]) ){ # no code given for generics
-          doc$definition <- paste(parsed[[on]]@code,collapse="\n")
-        }
-        if(!"description"%in%names(doc) && !is.na(parsed[[on]]@description) ){
-          doc$description <- parsed[[on]]@description
-        }
-      }
-      if("title" %in% names(doc) && !"description" %in% names(doc) ){
-        ## For short functions having both would duplicate, but a
-        ## description is required. Therefore automatically copy title
-        ## across to avoid errors at package build time.
-        doc$description <- doc$title
-      }
-      doc
-    }
-  extract.docs <- function(on){
-    res <- try({o <- objs[[on]]
-                extract.docs.try(o, on)},FALSE)
-    if(class(res)=="try-error"){
-      cat("Failed to extract docs for: ",on,"\n\n")
-      list()
-    } else if(0 == length(res) && inherits(objs[[on]],"standardGeneric")){
-      NULL
-    } else if(0 == length(res) && "function" %in% class(o)
-              && 1 == length(osource <- attr(o,"source"))
-              && 1 == length(grep(paste("UseMethod(",on,")",sep="\""),osource))
-              ){
-      ## phew - this should only pick up R.oo S3 generic definitions like:
-      ## attr(*, "source")= chr "function(...) UseMethod(\"select\")"
-      NULL
-    } else res
-  }
-  doc.names <- names(objs)
-  res <- sapply(doc.names,extract.docs,simplify=FALSE)
-  ## Special processing for S4 classes as they do not appear in normal ls()
-  for ( nn in names(parsed) ){
-    if ( parsed[[nn]]@created == "setClass" ){
-      S4class.docs <- extract.docs.setClass(parsed[[nn]])
-      docname <- paste(nn,"class",sep="-")
-      if ( is.null(res[[docname]]) ){
-        res[[docname]] <- S4class.docs
-        doc.names <- c(doc.names,docname)
-      } else {
-        stop(nn," appears as both S4 class and some other definition")
-      }
-    }
-  }
-  inherit.docs <- function(on){
-    in.res <- res[[on]]
-    if ( !is.null(parsed[[on]]) ){
-      for ( parent in parsed[[on]]@parent ){
-        if ( !is.na(parent) ){
-          if ( is.null(in.res) ){
-            in.res <- res[[parent]]
-          } else if ( parent %in% names(res) ){
-            parent.docs <- res[[parent]]
-            for ( nn in names(parent.docs) ){
-              if ( !nn %in% names(in.res) ){
-                in.res[[nn]] <- parent.docs[[nn]]
-              }
-            }
-          }
-        }
-      }
-    }
-    invisible(in.res)
-  }
-  all.done <- FALSE
-  while ( !all.done ){
-    res1 <- sapply(doc.names,inherit.docs,simplify=FALSE)
-    all.done <- identical(res1,res)
-    res <- res1
-  }
-  ## now strip out any generics (which have value NULL in res):
-  res.not.null <- sapply(res,function(x){!is.null(x)})
-  if ( 0 < length(res.not.null) && length(res.not.null) < length(res) ){
-    res <- res[res.not.null]
-  }
-  res
-### named list of lists. Each element is the result of a call to
-### extract.docs.fun, with names corresponding to functions found in
-### the R code file.
-}
-
-extract.docs.fun <- function # Extract documentation from a function
-### Given a function, return a list describing inline documentation in
-### the source of that function (relies on source attr).
-(fun,
-### The function to examine.
- name.fun
-### The name of the function for use in warning messages.
- )
-{
-  extract.docs.chunk(attr(fun,"source"),name.fun)
-### as for \code{\link{extract.docs.chunk}}
-}
-
-extract.docs.chunk <- function # Extract documentation from a function
-### Given a chunk of source code, return a list describing inline
-### documentation in that source code.
-(code,
-### The function to examine.
- name.fun
-### The name of the function/chunk to use in warning messages.
- )
-{
-  res <- list()
-  clines <- grep(prefix,code)
-  if(length(grep("#",code[1]))){
-    res$title <- gsub("[^#]*#\\s*(.*)","\\1",code[1],perl=TRUE)
-  }
-  if(length(clines) > 0){
-    ##details<<
-    ## The primary mechanism is that consecutive groups of lines matching
-    ## the specified prefix regular expression "\code{^### }" (i.e. lines
-    ## beginning with "\code{### }") are collected
-    ## as follows into documentation sections:\describe{
-    ## \item{description}{group starting at line 2 in the code}
-    ## \item{arguments}{group following each function argument}
-    ## \item{value}{group ending at the penultimate line of the code}}
-    ## These may be added to by use of the \code{##<<} constructs described
-    ## below.
-    bounds <- which(diff(clines)!=1)
-    starts <- c(1,bounds+1)
-    ends <- c(bounds,length(clines))
-    for(i in seq_along(starts)){
-      start <- clines[starts[i]]
-      end <- clines[ends[i]]
-      lab <- if(end+1==length(code))"value"
-      else if(start==2)"description"
-      else if ( 0 == length(grep("^\\s*#",code[start-1],perl=TRUE)) ){
-         arg <- gsub("^[ (]*","",code[start-1])
-         arg <- gsub("^([^=,]*)[=,].*","\\1",arg)
-         arg <- gsub("...","\\dots",arg,fix=TRUE) ##special case for dots
-         paste("item{",arg,"}",sep="")
-       } else {
-         next;
-       }
-      res[[lab]] <- decomment(code[start:end])
-    }
-  }
-  ##details<< For simple functions/arguments, the argument may also be
-  ## documented by appending \code{##<<} comments on the same line as the
-  ## argument name. Mixing this mechanism with \code{###} comment lines for
-  ## the same argument is likely to lead to confusion, as the \code{###}
-  ## lines are processed first.
-  arg.pat <- paste("^[^=,#]*?([\\w\\.]+)\\s*([=,].*|\\)\\s*)?",
-                   "<<\\s*(\\S.*?)\\s*$",
-                   sep="##") # paste avoids embedded trigger fooling the system
-
-  skeleton.fields <- c("alias","details","keyword","references","author",
-                       "note","seealso","value","title","description",
-                       "describe","end")
-  ##details<< Additionally, consecutive sections of \code{##} comment
-  ## lines beginning with \code{##}\emph{xxx}\code{<<} (where
-  ## \emph{xxx} is one of the fields: \code{alias}, \code{details},
-  ## \code{keyword}, \code{references}, \code{author}, \code{note},
-  ## \code{seealso}, \code{value}, \code{title} or \code{description})
-  ## are accumulated and inserted in the relevant part of the .Rd
-  ## file.
-  ##
-  ## For \code{value}, \code{title}, \code{description} and function
-  ## arguments, these \emph{append} to any text from "prefix"
-  ## (\code{^### }) comment lines, irrespective of the order in the
-  ## source.
-  ##
-  ## When documenting S4 classes, documentation from \code{details}
-  ## sections will appear under a section \code{Objects from the Class}. That
-  ## section typically includes information about construction methods
-  ## as well as other description of class objects (but note that the
-  ## class Slots are documented in a separate section).
-
-  ## but this should not appear, because separated by a blank line
-  extra.regexp <- paste("^\\s*##(",paste(skeleton.fields,collapse="|"),
-                        ")<<\\s*(.*)$",sep="")
-  cont.re <- "^\\s*##\\s*"
-  in.describe <- 0
-  first.describe <- FALSE
-  k <- 1
-  in.chunk <- FALSE
-  end.chunk <- function(field,payload)
-    {
-      if ( "alias" == field ){
-        ##note<< \code{alias} extras are automatically split at new lines.
-        payload <- gsub("\\n+","\\}\n\\\\alias\\{",payload,perl=TRUE)
-        chunk.sep <- "}\n\\alias{"
-      } else if ( "keyword" == field ){
-        ##keyword<< documentation utilities
-        ##note<< \code{keyword} extras are automatically split at white space,
-        ## as all the valid keywords are single words.
-        payload <- gsub("\\s+","\\}\n\\\\keyword\\{",payload,perl=TRUE)
-        chunk.sep <- "}\n\\keyword{"
-      } else if ( "title" == field ){
-        chunk.sep <- " "
-      } else if ( "description" == field ){
-        chunk.sep <- "\n"
-      } else {
-        ##details<< Each separate extra section appears as a new
-        ## paragraph except that: \itemize{\item empty sections (no
-        ## matter how many lines) are ignored;\item \code{alias} and
-        ## \code{keyword} sections have special rules;\item
-        ## \code{description} should be brief, so all such sections
-        ## are concatenated as one paragraph;\item \code{title} should
-        ## be one line, so any extra \code{title} sections are
-        ## concatenated as a single line with spaces separating the
-        ## sections.}
-        chunk.sep <- "\n\n"
-      }
-      chunk.res <- NULL
-      if ( 0 == length(grep("^\\s*$",payload,perl=TRUE)) )
-        chunk.res <-
-          if ( is.null(res[[field]]) ) payload
-          else paste(res[[field]], payload, sep=chunk.sep)
-      invisible(chunk.res)
-    }
-  while ( k <= length(code) ){
-    line <- code[k]
-    if ( 0 < length(grep(extra.regexp,line,perl=TRUE) ) ){
-      ## we have a new extra chunk - first get field name and any payload
-      new.field <- gsub(extra.regexp,"\\1",line,perl=TRUE)
-      new.contents <- gsub(extra.regexp,"\\2",line,perl=TRUE)
-
-      ##details<< As a special case, the construct \code{##describe<<} causes
-      ## similar processing to the main function arguments to be
-      ## applied in order to construct a describe block within the
-      ## documentation, for example to describe the members of a
-      ## list. All subsequent "same line" \code{##<<} comments go into that
-      ## block until terminated by a subsequent \code{##}\emph{xxx}\code{<<} line.
-      if ( "describe" == new.field ){
-        ##details<< Such regions may be nested, but not in such a way
-        ## that the first element in a \code{describe} is another \code{describe}.
-        ## Thus there must be at least one \code{##<<} comment between each
-        ## pair of \code{##describe<<} comments.
-        if ( first.describe ){
-          stop("consecutive ##describe<< at line",k,"in",name.fun)
-        } else {
-          if ( nzchar(new.contents) ){
-            if ( is.null(payload) || 0 == nzchar(payload) ){
-              payload <- new.contents
-            } else {
-              payload <- paste(payload,new.contents,sep="\n\n")
-            }
-          }
-          first.describe <- TRUE
-        }
-      } else if ( "end" == new.field ){
-        ##details<< When nested \code{describe} blocks are used, a comment-only
-        ## line with \code{##end<<} terminates the current level only; any
-        ## other valid \code{##}\emph{xxx}\code{<<} line terminates
-        ## all open describe blocks.
-        if ( in.describe>0 ){
-          ## terminate current \item and \describe block only
-          if ( "value" == cur.field && 1 == in.describe ){
-            payload <- paste(payload,"}",sep="")
-          } else {
-            payload <- paste(payload,"}\n}",sep="")
-          }
-          in.describe <- in.describe-1;
-        } else {
-          warning("mismatched ##end<< at line ",k," in ",name.fun)
-        }
-        if ( nzchar(new.contents) ){
-          if ( nzchar(payload) ){
-            payload <- paste(payload,new.contents,sep="\n")
-          } else {
-            payload <- new.contents
-          }
-        }
-      } else {
-        ## terminate all open \describe blocks (+1 because of open item)
-        if ( 0 < in.describe ){
-          if ( "value" != cur.field ){  # value is implicit describe block
-            payload <- paste(payload,"}",sep="")
-          }
-          while ( in.describe>0 ){
-            payload <- paste(payload,"}",sep="\n")
-            in.describe <- in.describe-1;
-          }
-        }
-        ## finishing any existing payload
-        if ( in.chunk ) res[[cur.field]] <- end.chunk(cur.field,payload)
-        in.chunk <- TRUE
-        cur.field <- new.field
-        payload <- new.contents
-        ##note<< The "value" section of a .Rd file is implicitly a describe
-        ## block and \code{##}\code{value}\code{<<} acts accordingly. Therefore
-        ## it automatically enables the describe block itemization (##<< after
-        ## list entries).
-        if ( "value" == new.field ){
-          first.describe <- TRUE;
-        }
-      }
-    } else if ( in.chunk && 0<length(grep(cont.re,line,perl=TRUE)) ){
-      ## append this line to current chunk
-      if ( 0 == length(grep(prefix,line,perl=TRUE)) ){
-        ##describe<< Any lines with "\code{### }" at the left hand
-        ## margin within the included chunks are handled separately,
-        ## so if they appear in the documentation they will appear
-        ## before the \code{##}\emph{xxx}\code{<}\code{<} chunks.
-### This one should not appear.
-        stripped <- gsub(cont.re,"",line,perl=TRUE)
-        if ( nzchar(payload) ){
-          payload <- paste(payload,stripped,sep="\n")
-        } else {
-          payload <- stripped
-        }
-      }
-    } else if ( 0 < length(grep(arg.pat,line,perl=TRUE)) ){
-      not.describe <- (0==in.describe && !first.describe)
-      if ( in.chunk && not.describe){
-        res[[cur.field]] <- end.chunk(cur.field,payload)
-      }
-      comment <- gsub(arg.pat,"\\3",line,perl=TRUE);
-      arg <- gsub(arg.pat,"\\\\item\\{\\1\\}",line,perl=TRUE)
-      in.chunk <- TRUE
-      if ( not.describe ){
-        cur.field <- gsub("...","\\dots",arg,fix=TRUE) ##special case for dots
-        payload <- comment
-      } else {
-        ## this is a describe block, so we need to paste with existing
-        ## payload as a new \item.
-        if ( first.describe ){
-          ## for first item, need to add describe block starter
-          if ( "value" == cur.field ){
-            payload <- paste(payload,"\n",arg,"{",sep="")
-          } else {
-            payload <- paste(payload,"\\describe{\n",arg,"{",sep="")
-          }
-          first.describe <- FALSE
-          in.describe <- in.describe+1
-        } else {
-          ## subsequent item - terminate existing and start new
-          payload <- paste(payload,"}\n",arg,"{",sep="")
-        }
-        if ( nzchar(comment) ){
-          payload <- paste(payload,comment,sep="")
-        }
-      }
-    } else if ( in.chunk ){
-      if ( 0 == in.describe && !first.describe ){
-        ## reached an end to current field, but need to wait if in.describe
-        res[[cur.field]] <- end.chunk(cur.field,payload)
-        in.chunk <- FALSE
-        cur.field <- NULL
-        payload <- NULL
-      }
-    }
-    k <- k+1
-  }
-  ## finishing any existing payload
-  if ( 0 < in.describe ){
-    if ( "value" != cur.field ){    # value is implicit describe block
-      payload <- paste(payload,"}",sep="")
-    }
-    while ( in.describe>0 ){
-      payload <- paste(payload,"}",sep="\n")
-      in.describe <- in.describe-1;
-    }
-  }
-  if ( in.chunk ) res[[cur.field]] <- end.chunk(cur.field,payload)
-  res
-### Named list of character strings extracted from comments. For each
-### name N we will look for N\{...\} in the Rd file and replace it
-### with the string in this list (implemented in modify.Rd.file).
-}
-
-setClass("DocLink", # Link documentation among related functions
-### The \code{.DocLink} class provides the basis for hooking together
-### documentation of related classes/functions/objects. The aim is that
-### documentation sections missing from the child are
-         representation(name="character", ##<< name of object
-                        created="character", ##<< how created
-                        parent="character", ##<< parent class or NA
-                        code="character", ##<< actual source lines
-                        description="character") ##<< preceding description block
-         )
-
-extract.file.parse <- function # File content analysis
-### Using the base \code{\link{parse}} function, analyse the file to link
-### preceding "prefix" comments to each active chunk. Those comments form
-### the default description for that chunk. The analysis also looks for
-### S4 class "setClass" calls and R.oo setConstructorS3 and setMethodS3
-### calls in order to link the documentation of those properly.
-(code.file)
-### Name of the file containing the source code - note that any nested
-### \code{source} statements are \emph{ignored} when scanning for
-### class definitions.
-{
-  code <- readLines(code.file)
-  res <- list()
-  old.opt <- options(keep.source=TRUE)
-  parsed <- try(parse(file=code.file))
-  options(old.opt)
-  if ( inherits(parsed,"try-error") ){
-    stop("parse ",code.file," failed with error:\n",parsed)
-  }
-  chunks <- attr(parsed,"srcref")
-  last.end <- 0
-  for ( k in 1:length(parsed) ){
-    start <- chunks[[k]][1]
-    ##details<< If the definition chunk does not contain a
-    ## description, any immediately preceding sequence consecutive
-    ## "prefix" lines will be used instead.
-    default.description <- NULL
-    while ( start > last.end+1
-           && 1 == length(grep(prefix,code[start-1],perl=TRUE)) ){
-      start <- start-1
-    }
-    if ( start < chunks[[k]][1] ){
-      default.description <- decomment(code[start:(chunks[[k]][1]-1)])
-    } else {
-      default.description <- NA_character_;
-    }
-    ##details<< Class and method definitions can take several forms,
-    ## determined by expression type: \describe{
-    ## \item{assignment (<-)}{Ordinary assignment of value/function;}
-    ## \item{setClass}{Definition of S4 class;}
-    ## \item{setConstructorS3}{Definition of S3 class using R.oo package;}
-    ## \item{setMethodS3}{Definition of method for S3 class using R.oo package.}}
-    ## Additionally, the value may be a name of a function defined elsewhere,
-    ## in which case the documentation should be copied from that other definition.
-    ## This is handled using the concept of documentation links.
-    lang <- parsed[[k]]
-    chars <- as.character(lang)
-    expr.type <- chars[1]
-    parent <- NA_character_
-
-    if ( expr.type == "<-" || expr.type == "setConstructorS3" || expr.type == "setClass" ){
-      object.name <- chars[2]
-      ## If the function definition is not embedded within the call, then
-      ## the parent is that function. Test whether the the third value
-      ## looks like a name and add it to parents if so.
-      if ( 1 == length(grep("^[\\._\\w]+$",chars[3],perl=TRUE)) ){
-        parent <- chars[3]
-      }
-      res[[object.name]] <- new("DocLink",name=object.name,
-                                created=expr.type,
-                                parent=parent,
-                                code=paste(chunks[[k]],sep=""),
-                                description=default.description)
-    } else if ( expr.type == "setMethodS3" ){
-      ##details<< The \code{setMethodS3} calls introduce additional
-      ## complexity: they will define an additional S3 generic (which
-      ## needs documentation to avoid warnings at package build time)
-      ## unless one already exists. This also is handled by "linking"
-      ## documentation. A previously unseen generic is linked to the
-      ## first defining instances, subsequent definitions of that generic
-      ## also link back to the first defining instance.
-      generic.name <- chars[2]
-      object.name <- paste(generic.name,chars[3],sep=".")
-      if ( is.null(res[[generic.name]]) ){
-        generic.desc <- paste("Generic method behind \\code{\\link{",object.name,"}}",sep="")
-        res[[generic.name]] <- new("DocLink",
-                                   name=generic.name,
-                                   created=expr.type,
-                                   parent=object.name,
-                                   code=NA_character_,
-                                   description=generic.desc)
-      } else {
-        parent <- res[[generic.name]]@parent
-      }
-      ## If the function definition is not embedded within the call, then
-      ## the parent is that function. Test whether the the fourth value
-      ## looks like a name and add it to parents if so.
-      if ( 1 == length(grep("^[\\._\\w]+$",chars[4],perl=TRUE)) ){
-        parent <- c(chars[4],parent)
-      }
-      res[[object.name]] <- new("DocLink",name=object.name,
-                                created=expr.type,
-                                parent=parent,
-                                code=paste(chunks[[k]],sep=""),
-                                description=default.description)
-    } else {
-      ## Not sure what to do with these yet. Need to deal with setMethod, setAs etc.
-    }
-  }
-  invisible(res)
-### Returns an invisible list of .DocLink objects.
-}
-
-extract.docs.setClass <- function # S4 class inline documentation
-### Using the same conventions as for functions, definitions of S4 classes
-### in the form \code{setClass("classname",\dots)} are also located and
-### scanned for inline comments.
-(doc.link)
-### DocLink object as created by \code{\link{extract.file.parse}}.
-### Note that \code{source} statements are \emph{ignored} when scanning for
-### class definitions.
-{
-  chunk.source <- doc.link@code
-  ##details<<
-  ## Extraction of S4 class documentation is currently limited to expressions
-  ## within the source code which have first line starting with
-  ## \code{setClass("classname"}. These are located from the source file
-  ## (allowing also for white space around the \code{setClass} and \code{(}).
-  ## Note that \code{"classname"} must be a quoted character string;
-  ## expressions returning such a string are not matched.
-  class.name <- doc.link@name
-
-  ##details<< For class definitions, the slots (elements of the
-  ## \code{representation} list) fill the role of function
-  ## arguments, so may be documented by \code{##<<} comments on
-  ## the same line or \code{### } comments at the beginning of the
-  ## following line.
-  f.n <- paste(class.name,"class",sep="-")
-  docs <- extract.docs.chunk(chunk.source,f.n)
-  ##details<<
-  ## The class definition skeleton includes an \code{Objects from the Class}
-  ## section, to which any \code{##details<<} documentation chunks are
-  ## written. It is given a vanilla content if there are no specific
-  ## \code{##details<<} documentation chunks.
-  if ( is.null(docs[["details"]]) ){
-    docs[["details"]] <-
-      paste("Objects can be created by calls of the form \\code{new(",
-            class.name," ...)}",sep="")
-  }
-  docs[["section{Objects from the Class}"]] <- docs[["details"]]
-  ## seealso has a skeleton line not marked by ~ .. ~, so have to suppress
-  if ( is.null(docs[["seealso"]]) ){
-    docs[["seealso"]] <- ""
-  }
-  if ( is.null(docs[["alias"]]) ){
-    docs[["alias"]] <- class.name
-  }
-  if ( is.null(docs[["description"]]) ){
-    docs[["description"]] <- doc.link@description
-  }
-  invisible(docs)
 }

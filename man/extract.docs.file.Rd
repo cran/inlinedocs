@@ -1,21 +1,20 @@
 \name{extract.docs.file}
 \alias{extract.docs.file}
-\title{Extract documentation from a file}
-\description{Parse an R code file and extract inline documentation from
-comments around each function.}
+\title{extract docs file}
+\description{Apply all parsers relevant to extract info from just 1 code file.}
 \usage{
-extract.docs.file(code.file, write.examples = TRUE)
+extract.docs.file(f, parsers = nondesc.parsers, ...)
 }
 \arguments{
-  \item{code.file}{The R code file to parse.}
-  \item{write.examples}{Gather examples from test files?}
+  \item{f}{File name of R code to read and parse.}
+  \item{parsers}{Parser Functions to use to parse the code and extract
+documentation.}
+  \item{\dots}{Other arguments to pass to Parser Functions.}
 }
 
-\value{named list of lists. Each element is the result of a call to
-extract.docs.fun, with names corresponding to functions found in
-the R code file.}
 
-\author{Toby Dylan Hocking <toby.hocking@inria.fr>, Keith Ponting <k.ponting@aurix.com>}
+
+\author{Inlinedocs development team <inlinedocs-support@lists.r-forge.r-project.org>}
 
 
 
