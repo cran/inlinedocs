@@ -11,11 +11,12 @@ test.file <- function
  verbose=TRUE
 ### Show output?
  ){
-  result <- extract.docs.file(f)
   e <- new.env()
-  sys.source(f,e)
+  suppressWarnings(sys.source(f,e))
   ## these are the items to check for, in no particular order
   .result <- e$.result
+  parsers <- e$.parsers
+  result <- extract.docs.file(f,parsers)
   for(FUN in names(.result)){
     if(verbose)cat(FUN,"")
     fun <- result[[FUN]]
@@ -38,8 +39,54 @@ test.file <- function
       stop("extracted some unexpected docs!")
     }
   }
+  ## make sure there are no unexpected outer lists
+  not.expected <- names(result)[!names(result)%in%names(.result)]
+  if(length(not.expected)){
+    print(not.expected)
+    stop("extracted some unexpected documentation objects!")
+  }
+  ## finally make a package using this file and see if it passes
+  ## without warnings TDH 27 May 2011 added !interactive() since
+  ## recursive calling R CMD check seems to systematically
+  ## fail... ERROR: startup.Rs not found. This file is usually copied
+  ## to the check directory and read as a .Rprofile, as done in
+  ## tools:::.runPackageTests ... is this a bug in R? Anyway for now
+  ## let's just not run the R CMD check.
+  if(!is.null(e$.dontcheck) || !interactive())return()
+  make.package.and.check(f,parsers,verbose)
   if(verbose)cat("\n")
 }
+
+make.package.and.check <- function
+### Assemble some R code into a package and process it using R CMD
+### check, stopping with an error if the check resulted in any errors
+### or warnings.
+(f, ##<< R code file name from which we will make a package
+ parsers=default.parsers,
+### Parsers to use to make the package documentation.
+ verbose=TRUE
+### print the check command line?
+ ){
+  pkgname <- sub("[.][rR]$","",basename(f))
+  pkgdir <- file.path(tempdir(),pkgname)
+  if(file.exists(pkgdir))unlink(pkgdir,recursive=TRUE)
+  rdir <- file.path(pkgdir,"R")
+  if(verbose)print(rdir)
+  dir.create(rdir,recursive=TRUE)
+  desc <- system.file(file.path("silly","DESCRIPTION"),package="inlinedocs")
+  file.copy(desc,pkgdir)
+  file.copy(f,rdir)
+  package.skeleton.dx(pkgdir,parsers)
+  cmd <- sprintf("%s CMD check %s",file.path(R.home("bin"), "R"),pkgdir)
+  if(verbose)cat(cmd,"\n")
+  checkLines <- system(cmd,intern=TRUE)
+  warnLines <- grep("(WARNING|ERROR)",checkLines,value=TRUE)
+  if(length(warnLines)>0){
+    print(warnLines)
+    stop("ERROR/WARNING encountered in package check!")
+  }
+}
+
 save.test.result <- function
 ### For unit tests, this is an easy way of getting a text
 ### representation of the list result of extract.docs.file.

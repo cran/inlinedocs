@@ -2,16 +2,18 @@
 fields <- c("Package","Maintainer","Author","Version",
             "License","Title","Description")
 
-`inlinedocExample<-` <- function (
-	### Attaching example code to attribute 'ex'.
-	f			##<< the function, to which to attach code for section 'examples' in documentation
-	, value		##<< the example code, usually the body of a function (see example)
+`inlinedocExample<-` <- structure(function
+### Attach example code to attribute 'ex'.
+(f,
+### the function, to which to attach code for section 'examples' in
+### documentation
+ value
+### the example code, usually the body of a function (see example)
 ) {
-	# see parsers.R examples.in.attr
+	## see parsers.R examples.in.attr
 	attr (f, "ex") <- value
 	f
-}
-inlinedocExample(`inlinedocExample<-`) <- function(){
+},ex=function(){
 	### Simple Hello-World function.
 	helloWorld <- function(){ cat('Hello World!\n')}
 	inlinedocExample(helloWorld) <- function(){
@@ -20,21 +22,21 @@ inlinedocExample(`inlinedocExample<-`) <- function(){
 		# function helloWorld
 		helloWorld()	# prints Hello World
 	}	
-}
+})
 		
 ### Default DESCRIPTION, written if it doesn't exist.  TODO, PhG:
 ### start with reasonable values here!
 empty.description <- matrix("",ncol=length(fields),dimnames=list(NULL,fields))
 
-package.skeleton.dx <- function # Package skeleton deluxe
-### Automates more of the setup process for a new source
-### package. After inspecting the specified R code files to find
+package.skeleton.dx <- structure(function # Package skeleton deluxe
+### Generates Rd files for a package based on R code and DESCRIPTION
+### metadata. After inspecting the specified R code files to find
 ### inline documentation, it calls the standard package.skeleton
 ### function, which creates bare Rd files. The inline documentation is
 ### added to these Rd files and then these files are copied to
-### ../man. It will overwrite files in the pkgdir/man directory.
+### pkgdir/man, possibly overwriting the previous files there.
 (pkgdir="..",
-### package directory where the DESCRIPTION file lives. Your code
+### Package directory where the DESCRIPTION file lives. Your code
 ### should be in pkgdir/R. We will setwd to pkgdir/R for the duration
 ### of the function, then switch back to where you were previously.
  parsers=NULL,
@@ -45,13 +47,12 @@ package.skeleton.dx <- function # Package skeleton deluxe
 ### list defined in options("inlinedocs.parsers"), if that is
 ### defined. If not, we use the package global default in the variable
 ### default.parsers.
- # PhG: added to support NAMESPACE creation!
  namespace = FALSE,
-### a logical indicating whether a NAMESPACE file should be generated
-### for this package. If \code{TRUE}, all objects whose name starts with
-### a letter, plus all S4 methods and classes are exported.
+### A logical indicating whether a NAMESPACE file should be generated
+### for this package. If \code{TRUE}, all objects whose name starts
+### with a letter, plus all S4 methods and classes are exported.
  ...
-### Parameters to pass to Parser functions.
+### Parameters to pass to Parser Functions.
  ){
   ##alias<< inlinedocs	 
 	 
@@ -114,56 +115,31 @@ package.skeleton.dx <- function # Package skeleton deluxe
   # PhG: if we create a namespace, we need to keep this list for further use
   if (isTRUE(namespace)) allpkgs <- pkgnames
   # PhG: We eliminate also from the list the packages that are already loaded
-  pkgnames <- pkgnames[!sprintf("package:%s",pkgnames) %in% search()]
+  if(length(pkgnames))
+    pkgnames <- pkgnames[!sprintf("package:%s",pkgnames) %in% search()]
   # PhG: according to Writing R Extensions manual, a package name can occur
   # several times in Depends
   pkgnames <- unique(pkgnames)
   if (length(pkgnames)) {
     # PhG: A civilized function returns the system in the same state it was
     # before => detach loaded packages at the end!
-    on.exit(try(for (pkg in pkgnames) detach(paste("package", pkg, sep = ":"),
-        unload = TRUE, character.only = TRUE), silent = TRUE), add = TRUE)
+    on.exit(suppressWarnings({
+      try(for (pkg in pkgnames)detach(paste("package", pkg, sep = ":"),
+        unload = TRUE, character.only = TRUE), silent = TRUE)
+    }), add = TRUE)
     # PhG: Shouldn't we need to check that packages are loaded and shouldn't
     # we exit with an explicit error message if not? Note: we don't use version
     # information here. That means we may well load wrong version of the
     # packages... and that is NOT detected as an error!
-    #for(pkg in pkgnames)try(library(pkg,character.only=TRUE),silent=TRUE)
     pkgmissing <- character(0)
     for (pkg in pkgnames) {
-        res <- try(library(pkg, character.only = TRUE), silent = TRUE)
-        if (inherits(res, "try-error"))
-            pkgmissing <- c(pkgmissing, pkg)
+      if(!require(pkg, character.only = TRUE)){
+        pkgmissing <- c(pkgmissing, pkg)
+      }
     }
     if (length(pkgmissing))
         stop("Need missing package(s): ", paste(pkgmissing, collapse = ", "))
   }
-
-  ## Essentially inlinedocs is this function, package.skeleton.dx,
-  ## that turn R/*.R, tests/*.R, and DESCRIPTION files into Rd
-  # PhG: this is tests/*.R, not test/*.R. Also, it is a bit ennoying to mix
-  # examples and tests in tests/*.R... It means that your 'tests'/'examples'
-  # will be run twice! Moreover, adding something to 'tests' causes a large
-  # overhead in compiling R packages on Mac OS X. For packages without C or
-  # FORTRAN code to compile (like those targetted by inlinedocs), it is
-  # easy to compile the packages using R CMD build on a Mac without any other
-  # addition... In case there is something in /tests, one has to install almost
-  # 2Gb of latest version of Xtools, downloaded on Mac web site after login
-  # (Gaps!). So, if one could avoid this painfull task, it would be wonderful!
-  # My suggestion would be to place example code in the /ex subdirtectory of the
-  # source of the package...
-  ## files. This is done by parsing them and making a list called
-  ## "docs" that summarizes them. This list is then used to edit the
-  ## Rd files output by package.skeleton and produce the final Rd
-  ## files. The old way of creating the docs list is rather
-  ## monolithic, and for maintenance purposes I would like to begin
-  ## modularization of this process. What is the best way to do this?
-  ## I propose that package.skeleton.dx() starts docs as an empty
-  ## list, then parses the concatenated R files as "objs," reads their
-  ## text as "code," reads the package description as "desc," then
-  ## passes these to a list of functions that will sequentially add
-  ## things to docs. This will make extension of inlinedocs quite
-  ## easy, since all you would need to do is write a new parser
-  ## function and add it to the list.
 
   ## for the parser list, first try reading package-specific
   ## configuration file
@@ -206,7 +182,9 @@ package.skeleton.dx <- function # Package skeleton deluxe
   # PhG: added namespace argument to package.skeleton()
   # twutz: addedd suppressWarnings around package.skeleton, 
   # because I always got the warning that the package does not exist
-  suppressWarnings(package.skeleton(name,code_files=code_files, namespace = isTRUE(namespace)))
+  suppressWarnings({
+    package.skeleton(name,code_files=code_files, namespace = isTRUE(namespace))
+  })
   cat("Modifying files automatically generated by package.skeleton:\n")
   ## documentation of generics may be duplicated among source files.
   dup.names <- duplicated(names(docs))
@@ -232,15 +210,14 @@ package.skeleton.dx <- function # Package skeleton deluxe
     cat("\n", file = nmspFile, append = TRUE)
     for (N in unique(names(docs))) {
         d <- docs[[N]]
-        if (!is.null(d$s3method))
-            cat('S3method("', d$s3method[1], '", "', d$s3method[2], '")\n',
+        if (!is.null(d$.s3method))
+            cat('S3method("', d$.s3method[1], '", "', d$.s3method[2], '")\n',
                 sep = "", file = nmspFile, append = TRUE)
     }
   }
   
   unlink(name,rec=TRUE)
-}
-inlinedocExample(package.skeleton.dx) <- function(){
+},ex=function(){
   library(inlinedocs)
 
   owd <- setwd(tempdir())
@@ -274,10 +251,56 @@ inlinedocExample(package.skeleton.dx) <- function(){
   ## cleanup: remove the test package from current workspace again
   unlink("silly",recursive=TRUE)
   setwd(owd)
+})
+
+
+replace.one <- function
+### Do find and replace for one element of an inner documentation list
+### on 1 Rd file.
+(torep,
+### tag to find.
+ REP,
+### contents of tag to put inside.
+ txt
+### text in which to search.
+ ){
+  ##if(grepl("Using the same conventions",REP))browser()
+  escape.backslashes <- function(x)gsub("\\\\","\\\\\\\\",x)
+  cat(" ",torep,sep="")
+  FIND1 <- escape.backslashes(torep)
+  FIND <- gsub("([{}])","\\\\\\1",FIND1)
+  FIND <- paste(FIND,"[{][^}]*[}]",sep="")
+  REP.esc <- escape.backslashes(REP)
+  ## need to escape backslashes for faithful copying of the comments
+  ## to the Rd file:
+  REP <- paste(FIND1,"{",REP.esc,"}",sep="")
+  ## escape percent signs in R code:
+  REP <- gsub("%","\\\\\\\\%",REP)
+  ## alias (in particular) need to change only the first one generated
+  ## (generic methods in classes add to standard skeleton alias set)
+  if ( torep %in% c("alias") ){
+    txt <- sub(FIND,REP,txt)
+  } else {
+    txt <- gsub(FIND,REP,txt)
+  }
+  classrep <- sub("item{(.*)}","item{\\\\code{\\1}:}",torep,perl=TRUE)
+  if ( classrep != torep ){
+    ## in xxx-class files, slots are documented with:
+    ## \item{\code{name}:}{Object of class \code{"function"} ~~ }
+    ## which requires slightly different processing
+    FIND1 <- escape.backslashes(classrep)
+    FIND <-
+      paste(gsub("([{}])","\\\\\\1",FIND1),
+            "\\{Object of class \\\\code\\{\\\"(\\S+)\\\"\\}[^}]*[}]",sep="")
+    ## need to escape backslashes for faithful copying of the comments
+    ## to the Rd file and also put the class type in parentheses.
+    REP <- paste(FIND1,"{(\\\\code{\\1}) ",REP.esc,"}",sep="")
+    ## escape percent signs in R code:
+    REP <- gsub("%","\\\\\\\\%",REP)
+    txt <- gsub(FIND,REP,txt)
+  }
+  txt
 }
-
-
-
 
 modify.Rd.file <- function
 ### Add inline documentation from comments to an Rd file
@@ -379,41 +402,21 @@ modify.Rd.file <- function
   # PhG: now restore masked function name, if any (case of %....% operators)
   if (!is.null(Nmask))
     dlines <- gsub(Nmask, N, dlines, fixed = TRUE)
+
+  ## sometimes (s4 classes) title is has \code{} blocks inside, which
+  ## causes problems with our find-replace regex inside replace.one,
+  ## so lets just put a simple title that works.
+  i <- grep("^\\\\title",dlines)
+  if(length(i)){
+    dlines[i] <- gsub("\\\\code[{][^}]*[}]","",dlines[i])
+  }
+  
+  txt <- paste(dlines,collapse="\n")
   
   ## Find and replace based on data in d
-  txt <- paste(dlines,collapse="\n")
   for(torep in names(d)){
-    if ( "s3method" == torep ){         # s3method is a flag handled later
-      next
-    }
-    cat(" ",torep,sep="")
-    FIND1 <- gsub("\\\\","\\\\\\\\",torep)
-    FIND <- paste(gsub("([{}])","\\\\\\1",FIND1),"[{][^}]*[}]",sep="")
-    ## need to escape backslashes for faithful copying of the comments
-    ## to the Rd file:
-    REP <- paste(FIND1,"{",gsub("\\\\","\\\\\\\\",d[[torep]]),"}",sep="")
-    ## escape percent signs in R code:
-    REP <- gsub("%","\\\\\\\\%",REP)
-    ## alias (in particular) need to change only the first one generated
-    ## (generic methods in classes add to standard skeleton alias set)
-    if ( torep %in% c("alias") ){
-      txt <- sub(FIND,REP,txt)
-    } else {
-      txt <- gsub(FIND,REP,txt)
-    }
-    classrep <- sub("item{(.*)}","item{\\\\code{\\1}:}",torep,perl=TRUE)
-    if ( classrep != torep ){
-      ## in xxx-class files, slots are documented with:
-      ## \item{\code{name}:}{Object of class \code{"function"} ~~ }
-      ## which requires slightly different processing
-      FIND1 <- gsub("\\\\","\\\\\\\\",classrep)
-      FIND <- paste(gsub("([{}])","\\\\\\1",FIND1),"\\{Object of class \\\\code\\{\\\"(\\S+)\\\"\\}[^}]*[}]",sep="")
-      ## need to escape backslashes for faithful copying of the comments
-      ## to the Rd file and also put the class type in parentheses.
-      REP <- paste(FIND1,"{(\\\\code{\\1}) ",gsub("\\\\","\\\\\\\\",d[[torep]]),"}",sep="")
-      ## escape percent signs in R code:
-      REP <- gsub("%","\\\\\\\\%",REP)
-      txt <- gsub(FIND,REP,txt)
+    if ( !grepl("^[.]",torep) ){## .flags should not be used for find-replace
+      txt <- replace.one(torep,d[[torep]],txt)
     }
   }
 
@@ -425,15 +428,15 @@ modify.Rd.file <- function
      utxt <- gsub("data[(]([^)]*)[)]","\\1",utxt)
    }
   
-  ## fix \method version if s3method
-  if ( !is.null(d$s3method) ){
-    pat <- paste(d$s3method,collapse=".")
-    rep <- paste("\\method{xx",d$s3method[1],"}{",d$s3method[2],"}",sep="")
+  ## fix \method version if .s3method
+  if ( !is.null(d$.s3method) ){
+    pat <- paste(d$.s3method,collapse=".")
+    rep <- paste("\\method{xx",d$.s3method[1],"}{",d$.s3method[2],"}",sep="")
     utxt <- gsub(pat,rep,utxt,fixed=TRUE)
     
     # PhG: there is the special case of generic<-.obj(x, ..., value) to rewrite
     # \method{generic}{obj}(x, ...) <- value
-    if (grepl("<-$", d$s3method[1])) {
+    if (grepl("<-$", d$.s3method[1])) {
         # 1) replace {generic<-} by {generic}
         utxt <- sub("<-[}]", "}", utxt)
         # 2) replace ..., value) by ...) <- value
@@ -461,13 +464,16 @@ modify.Rd.file <- function
                sep="")
   ## delete empty sections to suppress warnings in R CMD check
   txt <- gsub("\\\\[a-z]+[{]\\W*[}]","",txt)
-  if ( !is.null(d$s3method) ){
+  if ( !is.null(d$.s3method) ){
     ## and now remove the xx inserted above to prevent \method{[[}{...} falling
     ## foul of the above replacement!
     txt <- gsub("\\\\method{xx","\\method{",txt,fixed=TRUE)
   }
   ## This doesn't work if there are quotes in the default values:
   ## gsub(",",paste("\n",paste(rep(" ",l=nchar(N)-1),collapse="")),utxt)
+
+  ## convert to dos line endings to avoid problems with svn
+  txt <- gsub("(?<!\r)\n","\r\n",txt,perl=TRUE)
   cat(txt,file=f)
   cat("\n")
 }
