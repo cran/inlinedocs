@@ -11,7 +11,8 @@ collected as follows into documentation sections:\describe{
 These may be added to by use of the  constructs
 described below.}
 \usage{
-prefixed.lines(src, ...)
+prefixed.lines(src,
+...)
 }
 \arguments{
   \item{src}{
@@ -38,7 +39,7 @@ test <- function
 ### the return value
 ##seealso<< foobar
 }
-src <- attr(test,"source")
+src <- getSource(test)
 prefixed.lines(src)
 extract.xxx.chunks(src)
 }

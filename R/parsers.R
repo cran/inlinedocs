@@ -20,6 +20,21 @@ combine.list <- function(x,y){
 ### A list, same type as x, but with added elements from y.
 }
 
+
+getSource <- function
+### Extract a function's source code.
+(fun.obj
+### A function.
+ ) {
+      srcref <- attr(fun.obj, "srcref")
+      if (!is.null(srcref)) {
+        ##unlist(strsplit(as.character(srcref), "\n"))
+        as.character(srcref)
+      }
+      else attr(fun.obj, "source")
+### Source code lines as a character vector.
+}
+
 ### Prefix for code comments used with grep and gsub.
 prefix <- "^[ \t]*###[ \t]*"
 
@@ -46,12 +61,13 @@ forall <- function
  ){
   FUN <- FUN
   f <- function(objs,docs,...){
+    if(length(objs)==0)return(list())
     objs <- objs[sapply(objs,subfun)]
     L <- list()
     on.exit(cat(sprintf("Parser Function failed on %s\n",N)))
     for(N in union(names(docs),names(objs))){
       o <- objs[[N]]
-      L[[N]] <- FUN(src=attr(o,"source"),
+      L[[N]] <- FUN(src=getSource(o),
                     name=N,objs=objs,o=o,docs=docs,doc=docs[[N]],...)
     }
     on.exit()## remove warning message
@@ -118,14 +134,15 @@ prefixed.lines <- structure(function(src,...){
   for(i in seq_along(starts)){
     start <- clines[starts[i]]
     end <- clines[ends[i]]
-    lab <- if(all(grepl("^\\s*#",src[end:(length(src)-1)])))"value"
+    processed <- gsub("#.*","",gsub("[ }]","",src[(end+1):length(src)]))
+    lab <- if(all(processed==""))"value"
     else if(start==2)"description"
     else if(is.arg()){
       ##twutz: strip leading white spaces and brackets and ,
-      arg <- gsub("^[ \t(,]*", "", src[start - 1])	
+      arg <- gsub("^[ \t(,]*", "", src[start - 1])
       arg <- gsub("^([^=,]*)[=,].*", "\\1", arg)
       ##twutz: remove trailing whitespaces
-      arg <- gsub("^([^ \t]*)([ \t]+)$","\\1",arg)	
+      arg <- gsub("^([^ \t]*)([ \t]+)$","\\1",arg)
       arg <- gsub("...", "\\dots", arg, fix = TRUE)
       paste("item{",arg,"}",sep="")
     } else {
@@ -145,7 +162,7 @@ test <- function
 ### the return value
 ##seealso<< foobar
 }
-src <- attr(test,"source")
+src <- getSource(test)
 prefixed.lines(src)
 extract.xxx.chunks(src)
 })
@@ -242,11 +259,13 @@ extract.xxx.chunks <- function # Extract documentation from a function
     }
   while ( k <= length(src) ){
     line <- src[k]
+    ##print(line)
+    ##if(grepl("^$",line))browser()
     if ( grepl(extra.regexp,line,perl=TRUE) ){
       ## we have a new extra chunk - first get field name and any payload
       new.field <- gsub(extra.regexp,"\\1",line,perl=TRUE)
       new.contents <- gsub(extra.regexp,"\\2",line,perl=TRUE)
-
+      ##cat(new.field,"\n-----\n",new.contents,"\n\n")
       ##details<< As a special case, the construct \code{##describe<<} causes
       ## similar processing to the main function arguments to be
       ## applied in order to construct a describe block within the
@@ -255,9 +274,10 @@ extract.xxx.chunks <- function # Extract documentation from a function
       ## block until terminated by a subsequent \code{##}\emph{xxx}\code{<<} line.
       if ( "describe" == new.field ){
         ##details<< Such regions may be nested, but not in such a way
-        ## that the first element in a \code{describe} is another \code{describe}.
-        ## Thus there must be at least one \code{##<<} comment between each
-        ## pair of \code{##describe<<} comments.
+        ## that the first element in a \code{describe} is another
+        ## \code{describe}.  Thus there must be at least one
+        ## \code{##<<} comment between each pair of
+        ## \code{##describe<<} comments.
         if ( first.describe ){
           stop("consecutive ##describe<< at line",k,"in",name.fun)
         } else {
@@ -414,7 +434,7 @@ leadingS3generic <- function # check whether function name is an S3 generic
       generic <- paste(parts[1:i], collapse = ".")
       if (any(generic %in% utils:::getKnownS3generics()) ||
           utils:::findGeneric(generic, env) != "") {
-        object <- paste(parts[(i + 1):l], collapse = ".") 
+        object <- paste(parts[(i + 1):l], collapse = ".")
         ##details<< Assumes that the first name which matches any known
         ## generics is the target generic function, so if both x and x.y
         ## are generic functions, will assume generic x applying to objects
@@ -464,7 +484,7 @@ forfun.parsers <-
 forall.parsers <-
   list(## Fill in author from DESCRIPTION and titles.
        author.from.description=function(desc,...){
-         list(author=desc[,"Maintainer"])
+         list(author=desc[,"Author"])
        },
        ## The format section sometimes causes problems, so erase it.
        erase.format=function(...){
@@ -482,7 +502,7 @@ forall.parsers <-
            ## Special case for code contained in a function
            if (inherits(ex, "function")) {
              ## If source is available, start from there
-             src <- attr(ex, "source")
+             src <- getSource(ex)
              if (!is.null(src)) {
                ex <- src
              } else { ## Use the body of the function
@@ -490,6 +510,7 @@ forall.parsers <-
              }
              ## Eliminate leading and trailing code
              ex <- ex[-c(1, length(ex))]
+             if(ex[1]=="{")ex <- ex[-1]
              ## all the prefixes
              ex <- kill.prefix.whitespace(ex)
              ## Add an empty line before and after example
@@ -519,7 +540,7 @@ lonely <- structure(c(forall.parsers,forfun.parsers),ex=function(){
          sum=x+y) ##<< their sum
     ##end<<
   }
-  src <- attr(f,"source")
+  src <- getSource(f)
   lonely$extract.xxx.chunks(src)
   lonely$prefixed.lines(src)
 })
@@ -577,7 +598,7 @@ extra.code.docs <- function # Extract documentation from code chunks
     } else if(0 == length(res) && inherits(objs[[on]],"standardGeneric")){
       NULL
     } else if(0 == length(res) && "function" %in% class(o)
-              && 1 == length(osource <- attr(o,"source"))
+              && 1 == length(osource <- getSource(o))
               && grepl(paste("UseMethod(",on,")",sep="\""),osource)
               ){
       ## phew - this should only pick up R.oo S3 generic definitions like:
@@ -797,6 +818,12 @@ extract.docs.setClass <- function # S4 class inline documentation
   docs <- combine(docs,lonely$prefixed.lines(chunk.source))
   docs$title <- lonely$title.from.firstline(chunk.source)
   ##details<<
+  ## If there is no explicit title on the first line of setClass, then
+  ## one is made up from the class name.
+  if ( 0 == length(docs$title) ){
+    docs$title <- list(title=paste(class.name,"S4 class"))
+  }
+  ##details<<
   ## The class definition skeleton includes an \code{Objects from the Class}
   ## section, to which any \code{##details<<} documentation chunks are
   ## written. It is given a vanilla content if there are no specific
@@ -859,7 +886,7 @@ apply.parsers <- function
   objs <- sapply(ls(e),get,e,simplify=FALSE)
 
   docs <- list()
-  
+
   ## apply parsers in sequence to code and objs
   for(i in seq_along(parsers)){
     N <- names(parsers[i])

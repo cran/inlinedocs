@@ -4,7 +4,9 @@
 \description{Given source code of a function, return a list describing inline
 documentation in that source code.}
 \usage{
-extract.xxx.chunks(src, name.fun = "(unnamed function)", ...)
+extract.xxx.chunks(src,
+name.fun = "(unnamed function)",
+...)
 }
 \arguments{
   \item{src}{The source lines of the function to examine, as a character
@@ -55,9 +57,10 @@ list. All subsequent "same line"  comments go into that
 block until terminated by a subsequent \emph{xxx} line.
 
 Such regions may be nested, but not in such a way
-that the first element in a \code{describe} is another \code{describe}.
-Thus there must be at least one  comment between each
-pair of \code{##describe<<} comments.
+that the first element in a \code{describe} is another
+\code{describe}.  Thus there must be at least one
+ comment between each pair of
+\code{##describe<<} comments.
 
 When nested \code{describe} blocks are used, a comment-only
 line with \code{##end<<} terminates the current level only; any

@@ -9,7 +9,10 @@ function, which creates bare Rd files. The inline documentation is
 added to these Rd files and then these files are copied to
 pkgdir/man, possibly overwriting the previous files there.}
 \usage{
-package.skeleton.dx(pkgdir = "..", parsers = NULL, namespace = FALSE, ...)
+package.skeleton.dx(pkgdir = "..",
+parsers = NULL,
+namespace = FALSE,
+...)
 }
 \arguments{
   \item{pkgdir}{Package directory where the DESCRIPTION file lives. Your code

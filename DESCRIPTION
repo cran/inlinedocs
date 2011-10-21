@@ -1,11 +1,11 @@
 Package: inlinedocs
 Title: Convert inline comments to documentation
 Type: Package
-Version: 1.6
-Date: 2011-03-09
+Version: 1.8
+Date: 2011-10-21
 Author: Inlinedocs development team
-Maintainer: Inlinedocs development team
         <inlinedocs-support@lists.r-forge.r-project.org>
+Maintainer: Toby Dylan Hocking <toby.hocking@inria.fr>
 Description: Generates Rd files from R source code with comments,
         providing for quick, sustainable package development. The
         syntax keeps code and documentation close together, and is
@@ -16,6 +16,6 @@ License: GPL-3
 LazyLoad: yes
 Repository: CRAN
 Repository/R-Forge/Project: inlinedocs
-Repository/R-Forge/Revision: 275
-Date/Publication: 2011-05-31 11:41:00
-Packaged: 2011-05-27 21:00:15 UTC; rforge
+Repository/R-Forge/Revision: 308
+Date/Publication: 2011-10-24 11:33:53
+Packaged: 2011-10-21 21:18:11 UTC; rforge

@@ -3,7 +3,40 @@
 Attempt doc list to Rd list conversion, so we can generate Rd using
 tools:::print.Rd. See code in etc/parseRd.R
 
+Try to get more tests working: R CMD check and Rd conversion to
+doclist checks.
+
+Rd generation for attrSetter<- functions?
+
+== 1.8, 21 Oct 2011
+
+Remove inlinedocExample<- since this was deprecated and now giving a
+WARNING on package check.
+
+Take \author for Rd files from Author: section of DESCRIPTION, instead
+of Maintainer: section.
+
+bugfix for getSource, for R CMD check with R.2.14.
+
+== 1.7
+
+blank lines allowed after value comments.
+
+usage section broken over lines in modify.Rd.file for prettying pdf
+output.
+
+bugfix for when there are no objects defined in the
+package. previously forall functions would stop with an error, now we
+test for this condition before the line where we would get the error.
+
+getSource(FUN) function from Duncan Murdoch used to extract function
+source code, instead of attr(FUN,"source") for compatibility with
+R>=2.14.
+
 == 1.6
+
+Only do R CMD check in tests when we run interactively. If not
+CRAN/R-Forge gives a weird error.
 
 Remove support for examples.after.return.
 
