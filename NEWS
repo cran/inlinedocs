@@ -8,6 +8,49 @@ doclist checks.
 
 Rd generation for attrSetter<- functions?
 
+== 1.9.1 --- 21 May 2012
+
+use --as-cran for tests!
+
+R CMD check --as-cran inlinedocs_1.9.tar.gz had 
+* checking Rd cross-references ... WARNING
+... this seems to be related to \link{} tags in Rd?
+... or some strange bug in R CMD check?
+https://bugs.r-project.org/bugzilla3/show_bug.cgi?id=14875
+
+pause for 4 seconds in example for do.not.generate. On windows the
+filesystem records mtimes with a resolution of 2 seconds, so if we
+want to see that a file has changed we need to wait at least this
+long.
+
+== 1.9 --- 13 Jan 2012 -> 5 April 2012
+
+move code for generating a DESCRIPTION file into package.skeleton.dx.
+
+doc bugfix for some \code{} chunks in inlinedocs that were
+disappearing.
+
+Added inst/silly/NAMESPACE to avoid warnings on package check, and
+copy this over to all the mini test packages that are created for each
+of the inst/testfiles.
+
+Use \s space instead of \W in regexp for "delete empty sections to
+suppress warnings in R CMD check." This was causing a bug for
+i.e. \code{+} and \code{%*%} in the doc for the FUN argument of the
+apply function.
+
+do.not.generate("rd1","rd2") returns a Parser Function which will
+cause rd1.Rd and rd2.Rd to not be generated, so you can write these Rd
+files by hand.
+
+defaults for DESCRIPTION entries.
+
+Changes from Markus Muller, excludePattern argument to package.skeleton.dx
+
+Suggestion from Mark Thyer to not put a return after EVERY comma in
+the usage section. Instead, we parse the expression and use format to
+add line breaks.
+
 == 1.8, 21 Oct 2011
 
 Remove inlinedocExample<- since this was deprecated and now giving a

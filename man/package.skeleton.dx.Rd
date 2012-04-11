@@ -8,12 +8,8 @@ inline documentation, it calls the standard package.skeleton
 function, which creates bare Rd files. The inline documentation is
 added to these Rd files and then these files are copied to
 pkgdir/man, possibly overwriting the previous files there.}
-\usage{
-package.skeleton.dx(pkgdir = "..",
-parsers = NULL,
-namespace = FALSE,
-...)
-}
+\usage{package.skeleton.dx(pkgdir = "..", parsers = NULL, namespace = FALSE, 
+    excludePattern = FALSE, ...)}
 \arguments{
   \item{pkgdir}{Package directory where the DESCRIPTION file lives. Your code
 should be in pkgdir/R. We will setwd to pkgdir/R for the duration
@@ -28,12 +24,15 @@ default.parsers.}
   \item{namespace}{A logical indicating whether a NAMESPACE file should be generated
 for this package. If \code{TRUE}, all objects whose name starts
 with a letter, plus all S4 methods and classes are exported.}
+  \item{excludePattern}{A regular expression matching the files that are not to be processed e.g. because 
+inlinedocs can not handle them yet (like generic function definitions)}
   \item{\dots}{Parameters to pass to Parser Functions.}
 }
 
 
 
-\author{Inlinedocs development team <inlinedocs-support@lists.r-forge.r-project.org>}
+\author{Inlinedocs development team
+<inlinedocs-support@lists.r-forge.r-project.org>}
 
 
 
@@ -42,6 +41,7 @@ with a letter, plus all S4 methods and classes are exported.}
 library(inlinedocs)
 
 owd <- setwd(tempdir())
+##owd <- setwd("~")
 
 ## get the path to the silly example package that is provided with
 ## package inlinedocs
@@ -60,13 +60,17 @@ file.show( c(file.path("silly","R","silly.R"),
 
 ## check the package to see if generated documentation passes
 ## without WARNINGs
-cmd <- sprintf("\%s CMD check silly",file.path(R.home("bin"), "R"))
+cmd <- sprintf("\%s CMD check --as-cran silly",file.path(R.home("bin"), "R"))
 print(cmd)
 checkLines <- system(cmd,intern=TRUE)
 warnLines <- grep("WARNING",checkLines,value=TRUE)
 if(length(warnLines)>0){
+  writeLines(checkLines)
+  cat("\n\nLines with WARNING:\n")
   print(warnLines)
-  stop("WARNING encountered in package check!")
+  ## disable due to bug in R CMD check:
+  ## https://bugs.r-project.org/bugzilla3/show_bug.cgi?id=14875
+  ##stop("WARNING encountered in package check!")
 }
 
 ## cleanup: remove the test package from current workspace again

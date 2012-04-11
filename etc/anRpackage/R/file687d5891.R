@@ -1,0 +1,1 @@
+setClass("Silly",representation(forwards="function"))

@@ -1,3 +1,62 @@
+do.not.generate <- structure(function
+### Make a Parser Function used to indicate that certain Rd files
+### should not be generated.
+(...
+### Character strings indicating Rd files without the .Rd suffix.
+ ){
+  filenames <- c(...)
+  function(docs,...){
+    for(fn in filenames){
+      docs[[fn]] <- list()
+    }
+    docs$.overwrite <- TRUE
+    docs
+  }
+### A Parser Function that will delete items from the outer
+### Documentation List.
+},ex=function(){
+  silly.pkg <- system.file("silly",package="inlinedocs")
+  owd <- setwd(tempdir())
+  file.copy(silly.pkg,".",recursive=TRUE)
+
+  ## define a custom Parser Function that will not generate some Rd
+  ## files
+  custom <- do.not.generate("silly-package","Silly-class")
+  parsers <- c(default.parsers,list(exclude=custom))
+
+  ## At first, no Rd files in the man subdirectory.
+  man.dir <- file.path("silly","man")
+  dir(man.dir)
+
+  ## Running package.skeleton.dx will generate bare-bones files for
+  ## those specified in do.not.generate, if they do not exist.
+  package.skeleton.dx("silly",parsers)
+  Rd.files <- c("silly-package.Rd","Silly-class.Rd","silly.example.Rd")
+  Rd.paths <- file.path(man.dir,Rd.files)
+  stopifnot(all(file.exists(Rd.paths)))
+  
+  ## Save the modification times of the Rd files
+  old <- file.info(Rd.paths)$mtime
+
+  ## make sure there is at least 2 seconds elapsed, which is the
+  ## resolution for recording times on windows file systems.
+  Sys.sleep(4) 
+  
+  ## However, it will NOT generate Rd for files specified in
+  ## do.not.generate, if they DO exist already.
+  package.skeleton.dx("silly",parsers)
+  mtimes <- data.frame(old,new=file.info(Rd.paths)$mtime)
+  rownames(mtimes) <- Rd.files
+  mtimes$changed <- mtimes$old != mtimes$new
+  print(mtimes)
+  stopifnot(mtimes["silly-package.Rd","changed"]==FALSE)
+  stopifnot(mtimes["Silly-class.Rd","changed"]==FALSE)
+  stopifnot(mtimes["silly.example.Rd","changed"]==TRUE)
+
+  unlink("silly",recursive=TRUE)
+  setwd(owd)
+})
+
 ### combine lists or character strings
 combine <- function(x,y)UseMethod("combine")
 
@@ -143,7 +202,7 @@ prefixed.lines <- structure(function(src,...){
       arg <- gsub("^([^=,]*)[=,].*", "\\1", arg)
       ##twutz: remove trailing whitespaces
       arg <- gsub("^([^ \t]*)([ \t]+)$","\\1",arg)
-      arg <- gsub("...", "\\dots", arg, fix = TRUE)
+      arg <- gsub("...", "\\dots", arg, fixed = TRUE)
       paste("item{",arg,"}",sep="")
     } else {
       next;
@@ -364,7 +423,7 @@ extract.xxx.chunks <- function # Extract documentation from a function
         ## TDH 2010-06-18 For item{}s in the documentation list names,
         ## we don't need to have a backslash before, so delete it.
         arg <- gsub("^[\\]+","",arg)
-        cur.field <- gsub("...","\\dots",arg,fix=TRUE) ##special case for dots
+        cur.field <- gsub("...","\\dots",arg,fixed=TRUE) ##special case for dots
         payload <- comment
       } else {
         ## this is a describe block, so we need to paste with existing
@@ -686,7 +745,7 @@ setClass("DocLink", # Link documentation among related functions
          )
 
 extract.file.parse <- function # File content analysis
-### Using the base \code{\link{parse}} function, analyse the file to link
+### Using the base \code{parse} function, analyse the file to link
 ### preceding "prefix" comments to each active chunk. Those comments form
 ### the default description for that chunk. The analysis also looks for
 ### S4 class "setClass" calls and R.oo setConstructorS3 and setMethodS3
@@ -758,7 +817,15 @@ extract.file.parse <- function # File content analysis
       generic.name <- chars[2]
       object.name <- paste(generic.name,chars[3],sep=".")
       if ( is.null(res[[generic.name]]) ){
-        generic.desc <- paste("Generic method behind \\code{\\link{",object.name,"}}",sep="")
+        ## TDH 9 April 2012 Do NOT add \\link in generic.desc below,
+        ## since it causes problems on R CMD check.
+        ##* checking Rd cross-references ... WARNING
+        ##Error in find.package(package, lib.loc) : 
+        ##  there is no package called ‘MASS’
+        ##Calls: <Anonymous> -> lapply -> FUN -> find.package
+
+        generic.desc <-
+          paste("Generic method behind \\code{",object.name,"}",sep="")
         res[[generic.name]] <- new("DocLink",
                                    name=generic.name,
                                    created=expr.type,
@@ -792,7 +859,7 @@ extract.docs.setClass <- function # S4 class inline documentation
 ### in the form \code{setClass("classname",\dots)} are also located and
 ### scanned for inline comments.
 (doc.link
-### DocLink object as created by \code{\link{extract.file.parse}}.
+### DocLink object as created by \code{extract.file.parse}.
 ### Note that \code{source} statements are \emph{ignored} when scanning for
 ### class definitions.
  ){
@@ -874,30 +941,26 @@ apply.parsers <- function
   ## package when we try to process S4 classes defined in code
   e$.packageName <- "inlinedocs.processor"
   for (i in exprs){
-    ## TDH 2011-04-07 Disable this tryCatch since it makes it harder
-    ##to debug errors/warnings in the evaluated code
-
-    ##tryCatch({
       eval(i, e)
-    ##},error=function(e){
-      ##print(e)
-    ##})
   }
   objs <- sapply(ls(e),get,e,simplify=FALSE)
 
   docs <- list()
 
   ## apply parsers in sequence to code and objs
+  if(verbose)cat("Applying parsers:\n")
   for(i in seq_along(parsers)){
     N <- names(parsers[i])
     if(verbose){
       if(is.character(N) && N!=""){
-        cat(N," ",sep="")
-      }else cat('. ')
+        cat(N,"\n",sep="")
+      }else cat('.\n')
     }
     p <- parsers[[i]]
     ## This is the argument list that each parser receives:
     L <- p(code=code,objs=objs,docs=docs,env=e,...)
+    #print(paste(L,"\n"))
+    #if(N=="exclude")browser()
     docs <- combine(docs,L)
   }
   ## post-process to collapse all character vectors
@@ -906,9 +969,9 @@ apply.parsers <- function
       if(names(docs[[i]])[j]!=".s3method")
       docs[[i]][[j]] <- paste(docs[[i]][[j]],collapse="\n")
     }
-  }
+ }
   if(verbose)cat("\n")
-  docs
+  return(docs)
 ### A list of extracted documentation from code.
 }
 
