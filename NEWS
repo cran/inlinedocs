@@ -1,5 +1,7 @@
 == TODO
 
+Rd generation for "[.class" as in quadmod.
+
 Attempt doc list to Rd list conversion, so we can generate Rd using
 tools:::print.Rd. See code in etc/parseRd.R
 
@@ -7,6 +9,19 @@ Try to get more tests working: R CMD check and Rd conversion to
 doclist checks.
 
 Rd generation for attrSetter<- functions?
+
+Functions with {} as default arguments => error. See
+etc/default-function.R
+
+== 1.9.2 --- 28 Jan 2013
+
+Pierre Neuvial reports that concatenating files with comments at the
+last line sometimes results in unexpected documentation associated
+with the first object defined in the next file. Thus now we issue a
+warning whenever there is a comment on the last line of an .R file.
+
+check for existence of files in removeAliasesfrom.Rd.file, since they
+sometimes will not exist due to do.not.generate.
 
 == 1.9.1 --- 21 May 2012
 

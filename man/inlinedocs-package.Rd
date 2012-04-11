@@ -1,5 +1,6 @@
 \name{inlinedocs-package}
 \alias{inlinedocs-package}
+\alias{inlinedocs}
 \docType{package}
 \title{Convert inline comments to documentation}
 \description{Generates Rd files from R source code with comments,
@@ -10,7 +11,7 @@ Repeat Yourself principle.}
 \tabular{ll}{Package: \tab inlinedocs\cr
 Title: \tab Convert inline comments to documentation\cr
 Type: \tab Package\cr
-Version: \tab 1.9.1\cr
+Version: \tab 1.9.2\cr
 Date: \tab 2012-04-11\cr
 Author: \tab Inlinedocs development team
 <inlinedocs-support@lists.r-forge.r-project.org>\cr
