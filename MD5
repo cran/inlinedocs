@@ -1,7 +1,7 @@
-bffbcd2d86c23da5661927fa9ff11ced *DESCRIPTION
+b356b52081a32516901ed139bd47973e *DESCRIPTION
 4a50e5cb96789cc8a035a4fd0a251b17 *NAMESPACE
-c7c4a6abbf941f81ba10cdc2cc5207b2 *NEWS
-a869365b95bf1f7860a44a59195fcb48 *R/package.skeleton.dx.R
+43cb5c840ab0698a26f0a59d0e3dabc7 *NEWS
+95ccaf1d81cfb8084a8f54125a7c9ec2 *R/package.skeleton.dx.R
 a99a06d953f757a5b2e018a8dbe6c0d4 *R/parsers.R
 8a0957a04b1c84508f543c68b96ae685 *R/test.R
 4f13e958ea67e7031ddc7bb46186531e *etc/anne-parse.R
@@ -26,7 +26,8 @@ ce8873b43e1a199cf09a24873120d17c *etc/minimalErrorPkg/man/fun.Rd
 bd9831d94437a4d47778f2650cf1426a *etc/tags/package.skeleton.dx.R
 b444511fb6f81c2d6a5183b27ee032b6 *etc/tags/test.R
 60bd989831f32b30fb4fa3439003697d *etc/tags/test.Rd
-c0797f47a6a9f5ae2bd67f5339262dcf *inst/CITATION
+56c526865dad48aa39997bb5f6d5b2fc *etc/users.org
+907730f4062d098c97dc002e2f806afc *inst/CITATION
 89af4931e68c89b85253f6f5ead8830f *inst/silly/DESCRIPTION
 8b54e5a89fbda3af5e077053d40bec76 *inst/silly/NAMESPACE
 03d4f3d04cb81b764bf9aff3a55a5dce *inst/silly/R/silly.R
@@ -72,7 +73,7 @@ d559b09bd3782a3898833f693d7724d2 *man/forall.Rd
 bd8a540c1a94389e11d739871bc28d14 *man/forfun.Rd
 013965f08c3133456938526913a05d59 *man/forfun.parsers.Rd
 7de43e78b180f94a04a6715018915e5c *man/getSource.Rd
-2a298455fe74deb72976290c42ee1e5f *man/inlinedocs-package.Rd
+8e068ca2f3069b1c010e72536d1e7405 *man/inlinedocs-package.Rd
 f72958b4d00b5a954ec18be82e8bb07f *man/kill.prefix.whitespace.Rd
 efd277d8f8a6f60d09839772da539df5 *man/leadingS3generic.Rd
 fe02e50f01a57a4e58e662515ce45df9 *man/lonely.Rd
@@ -80,7 +81,7 @@ fe02e50f01a57a4e58e662515ce45df9 *man/lonely.Rd
 d2289cfbe10c5f9ec6d455e9cfe73bf8 *man/modify.Rd.file.Rd
 fe99cf86d5268414eb0aba5c922ba9b7 *man/non.descfile.names.Rd
 2c703eff37c1f620e58e5c7f898ee63a *man/nondesc.parsers.Rd
-4aac233c59d72eec80d1d060d3049102 *man/package.skeleton.dx.Rd
+16cb8855feee26a803f7645e2637ad27 *man/package.skeleton.dx.Rd
 b519f052b8c5e6f14013281714342e1c *man/prefix.Rd
 ff0aacefab5e6f96c5dc707b91356b8e *man/prefixed.lines.Rd
 ae7e3755186297f77283068b79131f4d *man/print.allfun.Rd
