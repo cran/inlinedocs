@@ -1,14 +1,8 @@
-\name{combine.NULL}
-\alias{combine.NULL}
-\title{combine NULL}
-\description{combine NULL objects.}
-\usage{\method{combine}{NULL}(x, y)}
-\arguments{
-  \item{x}{
-}
-  \item{y}{
-}
-}
+\name{getKnownS3generics}
+\alias{getKnownS3generics}
+\title{getKnownS3generics}
+\description{Copied from R-3.0.1, to support getKnownS3generics.}
+\usage{getKnownS3generics()}
 
 
 

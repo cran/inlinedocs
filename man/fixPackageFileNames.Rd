@@ -1,12 +1,10 @@
-\name{combine.NULL}
-\alias{combine.NULL}
-\title{combine NULL}
-\description{combine NULL objects.}
-\usage{\method{combine}{NULL}(x, y)}
+\name{fixPackageFileNames}
+\alias{fixPackageFileNames}
+\title{fixPackageFileNames}
+\description{Copied from R-3.0.1, to support fixPackageFileNames.}
+\usage{fixPackageFileNames(list)}
 \arguments{
-  \item{x}{
-}
-  \item{y}{
+  \item{list}{
 }
 }
 

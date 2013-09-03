@@ -508,8 +508,8 @@ leadingS3generic <- function # check whether function name is an S3 generic
       ## Look for a generic function (known by the system or defined
       ## in the package) that matches that part of the function name
       generic <- paste(parts[1:i], collapse = ".")
-      if (any(generic %in% utils:::getKnownS3generics()) ||
-          utils:::findGeneric(generic, env) != "") {
+      if (any(generic %in% getKnownS3generics()) ||
+          findGeneric(generic, env) != "") {
         object <- paste(parts[(i + 1):l], collapse = ".")
         ##details<< Assumes that the first name which matches any known
         ## generics is the target generic function, so if both x and x.y
@@ -823,7 +823,7 @@ extract.file.parse <- function # File content analysis
                                 parent=parent,
                                 code=paste(chunks[[k]],sep=""),
                                 description=default.description)
-    } else if ( expr.type == "setMethodS3" ){
+    } else if ( expr.type == "setMethodS3" || expr.type ==  "R.methodsS3::setMethodS3"){
       ##details<< The \code{setMethodS3} calls introduce additional
       ## complexity: they will define an additional S3 generic (which
       ## needs documentation to avoid warnings at package build time)

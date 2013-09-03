@@ -13,17 +13,23 @@ It is also easy to define a new syntax.}
 \tabular{ll}{Package: \tab inlinedocs\cr
 Title: \tab Convert inline comments to documentation\cr
 Type: \tab Package\cr
-Version: \tab 2013.7.23\cr
-Author: \tab Inlinedocs development team
-<inlinedocs-support@lists.r-forge.r-project.org>\cr
-Maintainer: \tab Toby Dylan Hocking <toby@sg.cs.titech.ac.jp>\cr
+Version: \tab 2013.9.3\cr
+Authors@R: \tab c(person("Toby Dylan","Hocking",role=c("aut","cre"),
+email="toby@sg.cs.titech.ac.jp"),
+person("Keith","Ponting",role="aut"),
+person("Thomas","Wutzler",role="aut"),
+person("Philippe","Grosjean",role="aut"),
+person("Markus","Müller",role="aut"),
+person("R Core Team",role=c("ctb","cph")))\cr
 URL: \tab http://inlinedocs.r-forge.r-project.org\cr
 Depends: \tab methods, utils, R (>= 2.9)\cr
-License: \tab GPL-3\cr
-LazyLoad: \tab yes\cr}
+License: \tab GPL-2 | GPL-3\cr
+LazyLoad: \tab yes\cr
+Encoding: \tab UTF-8\cr
+Author: \tab Toby Dylan Hocking <toby@sg.cs.titech.ac.jp> [aut, cre], Keith Ponting [aut], Thomas Wutzler [aut], Philippe Grosjean [aut], Markus Müller [aut], R Core Team [ctb, cph]\cr
+Maintainer: \tab Toby Dylan Hocking <toby@sg.cs.titech.ac.jp> [aut, cre], Keith Ponting [aut], Thomas Wutzler [aut], Philippe Grosjean [aut], Markus Müller [aut], R Core Team [ctb, cph]\cr}
 }
-\author{Inlinedocs development team
-<inlinedocs-support@lists.r-forge.r-project.org>}
+\author{Toby Dylan Hocking <toby@sg.cs.titech.ac.jp> [aut, cre], Keith Ponting [aut], Thomas Wutzler [aut], Philippe Grosjean [aut], Markus Müller [aut], R Core Team [ctb, cph]}
 
 \keyword{ package }
 

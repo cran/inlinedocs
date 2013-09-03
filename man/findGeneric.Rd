@@ -1,12 +1,12 @@
-\name{combine.NULL}
-\alias{combine.NULL}
-\title{combine NULL}
-\description{combine NULL objects.}
-\usage{\method{combine}{NULL}(x, y)}
+\name{findGeneric}
+\alias{findGeneric}
+\title{findGeneric}
+\description{Copied from R-3.0.1, to support findGeneric.}
+\usage{findGeneric(fname, envir)}
 \arguments{
-  \item{x}{
+  \item{fname}{
 }
-  \item{y}{
+  \item{envir}{
 }
 }
 
