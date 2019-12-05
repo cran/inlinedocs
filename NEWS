@@ -17,6 +17,50 @@ Rd generation for attrSetter<- functions?
 Functions with {} as default arguments => error. See
 etc/default-function.R
 
+2019.12.5
+
+deparse(width.cutoff=20L) is the minimal value to avoid long lines in
+Rd usage section for CRAN check.
+
+2019.8.21
+
+escape percents in Rd examples.
+
+2019.7.30
+
+New default parser functions: internal.links, external.links,
+arguments.code.
+
+2015.05.15
+
+Add Maintainer to DESCRIPTION.
+
+2015.06.05
+
+bugfix for example(do.not.generate).
+
+2015.06.04
+
+Tests pass with R-3.2.0, after fixing some bugs with escaping percents
+in quoted text in the R code of usage sections of Rd files
+(testfiles/escape.percent.R).
+
+For testfiles/wide.lines.R, now that we use deparse(width.cutoff=50L)
+rather than the default of 60 (which caused a NOTE for a line longer
+than 90 characters on R CMD check).
+
+2014.6.3
+
+Forked to tdhock/github.
+
+Use excludePattern to avoid processing .[rsqS] files, and allow NULL
+if you do not want to exclude any files.
+
+2014.2.11
+
+attr(o, "ex", exact=TRUE) to avoid taking other attributes with
+similar names when in fact no examples are present.
+
 2013.9.3 copy utils code to utils.R so we do not have to use utils:::
 and so we can now pass R CMD check for R-devel on CRAN.
 

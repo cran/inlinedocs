@@ -1,15 +1,13 @@
 package.skeleton.dx <- structure(function # Package skeleton deluxe
 ### Generates Rd files for a package based on R code and DESCRIPTION
-### metadata. After inspecting the specified R code files to find
-### inline documentation, it calls the standard package.skeleton
-### function, which creates bare Rd files. The inline documentation is
-### added to these Rd files and then these files are copied to
-### pkgdir/man, possibly overwriting the previous files there.
+### metadata. After reading the pkgdir/R/*.R code files to find inline
+### documentation (by default R code in *.r files will not be used for
+### inlinedocs), writes docs to pkgdir/man/*.Rd files, possibly
+### overwriting the previous files there.
 (pkgdir="..",
 ### Package directory where the DESCRIPTION file lives. Your code
-### should be in pkgdir/R. We will setwd to pkgdir/R for the duration
-### of the function, then switch back to where you were previously.
- parsers=NULL,
+### should be in pkgdir/R.
+  parsers=NULL,
 ### List of Parser functions, which will be applied in sequence to
 ### extract documentation from your code. Default NULL means to first
 ### search for a definition in the variable "parsers" in
@@ -17,20 +15,22 @@ package.skeleton.dx <- structure(function # Package skeleton deluxe
 ### list defined in options("inlinedocs.parsers"), if that is
 ### defined. If not, we use the package global default in the variable
 ### default.parsers.
- namespace = FALSE,
+  namespace = FALSE,
 ### A logical indicating whether a NAMESPACE file should be generated
 ### for this package. If \code{TRUE}, all objects whose name starts
 ### with a letter, plus all S4 methods and classes are exported.
- excludePattern=FALSE,
+  excludePattern="[.][rsqS]$",
 ### A regular expression matching the files that are not to be
 ### processed e.g. because inlinedocs can not handle them yet (like
-### generic function definitions)
- ...
-### Parameters to pass to Parser Functions.
- ){
+### generic function definitions). Default value means to only process
+### inlinedocs in .R files. Set excludePattern=NULL to process all
+### code files, e.g. *.r files.
+  verbose=FALSE
+### show messages about parser functions used?
+){
   ## This causes a warning on R CMD check TDH 28 Jan 2013.
   ##alias< < inlinedocs
-	 
+
   chdir <- file.path(pkgdir,"R")
   if(!file.exists(chdir))stop("need pkgdir/R, tried ",chdir)
   old.wd <- setwd(chdir)
@@ -62,8 +62,8 @@ package.skeleton.dx <- structure(function # Package skeleton deluxe
     matrix(description.defaults,ncol=length(fields),dimnames=list(NULL,fields))
 
 
-  
-  
+
+
   ## if no DESCRIPTION, make one and exit.
   descfile <- file.path("..","DESCRIPTION")
   if(!file.exists(descfile)){
@@ -110,7 +110,7 @@ package.skeleton.dx <- structure(function # Package skeleton deluxe
   # like R.oo... Extract from Writing R Extensions manual:
   # "The `Package' and `Version' fields give the name and the version of the
   # package, respectively. The name should consist of letters, numbers, and the
-  # dot character and start with a letter." 
+  # dot character and start with a letter."
   # Consequently, I propose:
   pkgnames <- gsub("\\W*([a-zA-Z][a-zA-Z0-9.]*)\\b.*", "\\1", required)
   # PhG: We need to eliminate 'R' from the list!
@@ -160,15 +160,35 @@ package.skeleton.dx <- structure(function # Package skeleton deluxe
   }
   ## if nothing configured, just use the pkg default
   if(is.null(parsers))parsers <- default.parsers
-  
+
   ## concatenate code files and parse them
   # PhG: in Writing R Extensions manuals, source code in /R subdirectory can
   # have .R, .S, .q, .r, or .s extension. However, it makes sense to restrict
   # this to .R only for inlinedocs, but a clear indication is required in the
   # man page!
-  code_files <- if(!"Collate"%in%colnames(desc))Sys.glob("*.R")
-  else strsplit(gsub("\\s+"," ",desc[,"Collate"]),split=" ")[[1]]
-  code_files =grep(excludePattern,code_files,invert=TRUE,value=TRUE)
+  code_files <- if("Collate"%in%colnames(desc)){
+    collate.txt <- gsub("\\s+"," ",desc[,"Collate"])
+    collate.items <- strsplit(collate.txt,split=" ")[[1]]
+    collate.noquote <- gsub("['\"]", "", collate.items)
+    collate.files <- collate.noquote[collate.noquote != ""]
+    collate.files
+  }else{
+    Sys.glob("*.[RrsqS]")
+  }
+  if(!is.null(excludePattern)){
+    stopifnot(is.character(excludePattern))
+    stopifnot(length(excludePattern) == 1)
+    exclude.i <- grep(excludePattern, code_files)
+    if(length(exclude.i) > 0){
+      warn.files <- code_files[exclude.i]
+      warn.txt <- paste(warn.files, collapse=" ")
+      plural <- ifelse(length(warn.files) == 1, "", "s")
+      warning("excludePattern=", excludePattern,
+              " ignored R source file", plural,
+              " ", warn.txt)
+      code_files <- code_files[-exclude.i]
+    }
+  }
   ## TDH 28 Jan 2013, warn users such as Pierre Neuvial if they have
   ## comments on the last line of one input file. Sometimes comments
   ## on the last line can appear to be the first line of comments of
@@ -183,35 +203,40 @@ package.skeleton.dx <- structure(function # Package skeleton deluxe
               ", unexpected docs may be extracted")
     }
   }
-  #print(excludePattern)
+
   ## Make package skeleton and edit Rd files (eventually just don't
   ## use package.skeleton at all?)
   name <- desc[,"Package"]
   unlink(name,recursive=TRUE)
-  package.skeleton(name,code_files=code_files)
+  capture.fun <- if(verbose)`{` else capture.output
+  capture.fun({
+    package.skeleton(name,code_files=code_files)
+  }, type="message")
+  pkg.Rd <- file.path(name, "man", paste0(name, "-package.Rd"))
+  unlink(pkg.Rd)
 
-#  # PhG: one must consider a potential Encoding field in DESCRIPTION file!
+  # PhG: one must consider a potential Encoding field in DESCRIPTION file!
   # which is used also for .R files according to Writing R Extensions
   if ("Encoding" %in% colnames(desc)) {
     oEnc <- options(encoding = desc[1, "Encoding"])$encoding
     on.exit(options(encoding = oEnc), add = TRUE)
   }
   code <- do.call(c,lapply(code_files,readLines))
-#  #print(code)
-  docs<- apply.parsers(code,parsers,verbose=TRUE,desc=desc)
+  docs <- apply.parsers(code,parsers,verbose=verbose,desc=desc)
 
-  cat("Modifying files automatically generated by package.skeleton:\n")
+  if(verbose)cat("Modifying files automatically generated by package.skeleton:\n")
   ## documentation of generics may be duplicated among source files.
   dup.names <- duplicated(names(docs))
   if ( any(dup.names) ){
     warning("duplicated file names in docs: ",paste(names(docs)[dup.names]))
   }
   for(N in unique(names(docs))) {
-	modify.Rd.file(N,name,docs)
+	modify.Rd.file(N,name,docs,verbose)
         if(grepl("class",N)){
 		removeAliasesfrom.Rd.file(N,name,code)
 	}
   }
+
   file.copy(file.path(name,'man'),"..",recursive=TRUE)
   # PhG: copy NAMESPACE file back
   if (isTRUE(namespace)) {
@@ -222,7 +247,7 @@ package.skeleton.dx <- structure(function # Package skeleton deluxe
     # statement in the NAMESPACE
     nmspFile <- file.path("..", "NAMESPACE")
     cat("import(", paste(allpkgs, collapse = ", "), ")\n\n", sep = "",
-        file = nmspFile) 
+        file = nmspFile)
     # PhG: append the content of the NAMESPACE file generated by
     # package.skeleton()
     file.append(nmspFile, file.path(name,'NAMESPACE'))
@@ -235,40 +260,33 @@ package.skeleton.dx <- structure(function # Package skeleton deluxe
                 sep = "", file = nmspFile, append = TRUE)
     }
   }
-  
+
   unlink(name,recursive=TRUE)
 },ex=function(){
+
   owd <- setwd(tempdir())
-  
+
   ## get the path to the silly example package that is provided with
   ## package inlinedocs
   testPackagePath <- file.path(system.file(package="inlinedocs"),"silly")
   ## copy example project to the current unlocked workspace that can
   ## be modified
   file.copy(testPackagePath,".",recursive=TRUE)
-  
+
   ## generate documentation .Rd files for this package
   package.skeleton.dx("silly")
-  
+
   ## check the package to see if generated documentation passes
   ## without WARNINGs.
   if(interactive()){
     cmd <- sprintf("%s CMD check --as-cran silly",file.path(R.home("bin"), "R"))
     print(cmd)
-    checkLines <- system(cmd,intern=TRUE)
-    warnLines <- grep("WARNING",checkLines,value=TRUE)
-    if(length(warnLines)>0){
-      writeLines(checkLines)
-      cat("\n\nLines with WARNING:\n")
-      print(warnLines)
-      ## disable due to bug in R CMD check:
-      ## https://bugs.r-project.org/bugzilla3/show_bug.cgi?id=14875
-      ##stop("WARNING encountered in package check!")
-    }
-  }  
+    system(cmd)
+  }
   ## cleanup: remove the test package from current workspace again
   unlink("silly",recursive=TRUE)
   setwd(owd)
+
 })
 
 
@@ -279,12 +297,13 @@ replace.one <- function
 ### tag to find.
  REP,
 ### contents of tag to put inside.
- txt
+ txt,
 ### text in which to search.
+  verbose=FALSE
+### cat messages?
  ){
-  ##if(grepl("Using the same conventions",REP))browser()
-  escape.backslashes <- function(x)gsub("\\\\","\\\\\\\\",x)
-  cat(" ",torep,sep="")
+  escape.backslashes <- function(x)gsub("\\","\\\\",x, fixed=TRUE)
+  if(verbose)cat(" ",torep,sep="")
   FIND1 <- escape.backslashes(torep)
   FIND <- gsub("([{}])","\\\\\\1",FIND1)
   FIND <- paste(FIND,"[{][^}]*[}]",sep="")
@@ -292,8 +311,12 @@ replace.one <- function
   ## need to escape backslashes for faithful copying of the comments
   ## to the Rd file:
   REP <- paste(FIND1,"{",REP.esc,"}",sep="")
-  ## escape percent signs in R code:
-  REP <- gsub("%","\\\\\\\\%",REP)
+  ## escape backslashes (only in examples for now)
+  if(torep %in% c("examples")){
+    REP <- gsub("\\", "\\\\", REP, fixed=TRUE)
+  }
+  ## escape percent signs which may be in \code in any block.
+  REP <- gsub("%", "\\\\%", REP, fixed=TRUE)
   ## alias (in particular) need to change only the first one generated
   ## (generic methods in classes add to standard skeleton alias set)
   if ( torep %in% c("alias") ){
@@ -328,12 +351,12 @@ removeAliasesfrom.Rd.file <- function
  pkg,
 ### Package name.
 code
-### The code of the package 
+### The code of the package
 )
 {
-  # <mm:package.skeleton adds some duplicated aliases to the .*-class.Rd files 
-  # to get rid of the warnings from R CMD check 
-  # we have to delete them 
+  # <mm:package.skeleton adds some duplicated aliases to the .*-class.Rd files
+  # to get rid of the warnings from R CMD check
+  # we have to delete them
   # the duplicated aliases have 2 sources
 
   Nme <- fixPackageFileNames(N)
@@ -343,48 +366,45 @@ code
   ## If we do.not.generate this file, it does not exist so we need to
   ## do nothing to avoid errors.
   if(!file.exists(f))return()
-  
+
   dlines <- readLines(f)
-  
+
   name=gsub("-class","",N)
-  
+
   # these we will later comment out
   # now we look at all the aliases produces by package.skeleton
   aliasLine2name=function(line){return(gsub("^\\\\alias\\{(.*)\\}","\\1",line))}
   aliasInd <- grep("^\\\\alias.*",dlines)
   # aliasnames=as.character(lapply(dlines[aliasInd],aliasLine2name))
   # duplicates= intersect(methodnames,aliasnames)
-  
+
   if(length(aliasInd)){
       # first get rid of the ${classname}-mehthod stuff
       p1=paste(",",name,"-method",sep="")
-  
+
       # next get rid of the -mehthod stuff
       patterns=c(p1,",ANY-method",",ANY",",character")
       for (pattern in patterns){
-          dlines[aliasInd] <- gsub(pattern,"",dlines[aliasInd]) 
+          dlines[aliasInd] <- gsub(pattern,"",dlines[aliasInd])
       }
   }
-  # next: 
+  # next:
   # the names of the methods implemented by the class
-  # which occur in all ".*-class.Rd" files 
-  # as aliases 
-  # to find them we ask for those methods but 
+  # which occur in all ".*-class.Rd" files
+  # as aliases
+  # to find them we ask for those methods but
   # therefore have to readthe the code to be documented.
-  # As the apply.parsers function we do this in a separate 
+  # As the apply.parsers function we do this in a separate
   # environment
   # mm:
   # This could probably be factored out since it duplicates
   # some functionality of apply.parsers (evaluating the sources again)
   # but I am not sure how big the changes involved woud be.
-  
-  e <- new.env()
+
+  e <- fake_package_env()
   old <- options(keep.source=TRUE,topLevelEnvironment=e)
   on.exit(options(old))
   exprs <- parse(text=code)
-  ## set this so that no warnings about creating a fake
-  ## package when we try to process S4 classes defined in code
-  e$.packageName <- "inlinedocs.processor"
   for (i in exprs){
       eval(i, e)
   }
@@ -402,7 +422,7 @@ code
   		ret=gsub("(^\\\\alias)","%% \\1",line)
   	}
   	return(ret)
-  } 
+  }
   for (j in aliasInd){
   	dlines[[j]]=markDupAliases(dlines[[j]])
   }
@@ -413,7 +433,7 @@ code
   fc=file(f,open="w+")#anonymous file
   writeLines(txt,fc)
   close(fc)
-}	
+}
 
 modify.Rd.file <- function
 ### Add inline documentation from comments to an Rd file
@@ -422,9 +442,11 @@ modify.Rd.file <- function
 ### Name of function/file to which we will add documentation.
  pkg,
 ### Package name.
- docs
+ docs,
 ### Named list of documentation in extracted comments.
- ){
+  verbose=FALSE
+### Cat messages?
+){
   # PhG: for functions like 'obj<-', package.skeleton creates files like 'obj_-'
   # => rework names the same way, i.e., using the same function from utils package
   Nme <- fixPackageFileNames(N)
@@ -449,31 +471,25 @@ modify.Rd.file <- function
     unlink(f)
     return()
   }
-  cat(N,":",sep="")
+  if(verbose)cat(N,":",sep="")
   d <- docs[[N]]
   ## for some functions no documentatian file is created by package.skeleton
   ## for instance generic functions that are already defined in other packages
-  ## like print or plot so there is still the possibillity that 
+  ## like print or plot so there is still the possibillity that
   ## f is missing altogether
-  if (!file.exists(f)) {
-	print("mm missing file")
-	print(f)
-	return()
-	}
+  if(!file.exists(f)) {
+    if(verbose)cat("doc list but no Rd file:", f, "\n")
+    return()
+  }
   dlines <- readLines(f)
 
-  ## cut out alias line if we are in the package file and there is a
-  ## matching function
-  if(length(grep("-package$",N)) && "alias" %in% names(d) )
-    dlines <- dlines[-grep(paste("alias[{]",N,sep=""),dlines)-1]
-  else if ( "alias" %in% names(d) ){
+  if ( "alias" %in% names(d) ){
     ## allowing alias changes have to make sure that original alias remains
     ## note that the contents of this go inside \alias{}, so the separator
     ## has to terminate one and start the next
     d[["alias"]] <- paste(paste(N,"}\n\\alias{",sep=""),
                             d[["alias"]],sep="")
   }
-  
 
   # PhG: in the special case of custom operators like %....%, we must protect
   # these strings in name, alias and usage (at least)! Otherwise, bad things
@@ -526,7 +542,7 @@ modify.Rd.file <- function
   }
   name=N
   txt <- paste(dlines,collapse="\n")
-  
+
   ## Fix usage
   m <- regexpr("usage[{][^}]*[}]",txt)
   Mend <- m+attr(m,"match.length")
@@ -543,20 +559,31 @@ modify.Rd.file <- function
 	  # PhG: this is for special functions %...% which should write x %...% y
 	  if (grepl("^%.*%$", N)) {
 		  utxt <- sub("(%.*%)[(]([^,]+), ([^)]+)[)]",
-				  "\\2 \\1 \\3", utxt) 
+				  "\\2 \\1 \\3", utxt)
 	  }
   }
-  
+
   ## multiple lines for the PDF!
-  # tw: parse fails on accessor functions such as "myF<-" <- function(data,x) 
+  # tw: parse fails on accessor functions such as "myF<-" <- function(data,x)
   # see testfile accessorFunctions.R
   # workaround with tryCatch
   parsed <- utxt
   tryCatch({
-	  parsed <- parse(text=utxt)
-  }, error = function(e) warning(e) )
+    parsed <- parse(text=utxt)
+  }, error = function(e) {
+    if(!grepl("'\\%' is an unrecognized escape", e, fixed=TRUE)){
+      warning(e)
+    }
+  })
   if(length(parsed)){
-	  utxt <- sprintf("usage{%s}\n",paste(format(parsed[[1]]),collapse="\n"))
+    ## by default R uses width.cutoff=60L but that results in wide
+    ## lines with more than 90 characters (which generates a NOTE on R
+    ## CMD check) for some functions such as testfiles/wide.lines.R
+    ## Thanks to Jannis v. Buttlar for the bug report. TDH 5 Dec 2019
+    ## ?deparse in R-3.6.1 says that width.cutoff=20 is the smallest
+    ## possible value.
+    usage.vec <- deparse(parsed[[1]], width.cutoff=20L)
+    utxt <- sprintf("usage{%s}\n",paste(usage.vec,collapse="\n"))
   }
   if(length(grep("usage[{]data",utxt))){
     utxt <- gsub("data[(]([^)]*)[)]","\\1",utxt)
@@ -567,7 +594,7 @@ modify.Rd.file <- function
     pat <- paste(d$.s3method,collapse=".")
     rep <- paste("\\method{xx",d$.s3method[1],"}{",d$.s3method[2],"}",sep="")
     utxt <- gsub(pat,rep,utxt,fixed=TRUE)
-    
+
     # PhG: there is the special case of generic<-.obj(x, ..., value) to rewrite
     # \method{generic}{obj}(x, ...) <- value
     if (grepl("<-$", d$.s3method[1])) {
@@ -587,15 +614,6 @@ modify.Rd.file <- function
                substr(txt,Mend+1,nchar(txt)),
                sep="")
 
-
-  
-  ## At least in my code, any remaining % symbols are in \usage sections
-  ## as function arguments. These promptly break Rd check because you end
-  ## up with unterminated strings. Just in case, the following regexp only
-  ## modifies those % symbols which follow something other than %.
-  ## (a more complicated version would attempt to do so only within strings.)
-  txt <- gsub("([^%])%","\\1\\\\%",txt,perl=TRUE)
-  
   # PhG: now restore masked function name, if any (case of %....% operators)
   if (!is.null(Nmask))
     txt <- gsub(Nmask, N, txt, fixed = TRUE)
@@ -603,7 +621,7 @@ modify.Rd.file <- function
   ## Find and replace based on data in d
   for(torep in names(d)){
     if ( !grepl("^[.]",torep) ){## .flags should not be used for find-replace
-      txt <- replace.one(torep,d[[torep]],txt)
+      txt <- replace.one(torep,d[[torep]],txt,verbose)
     }
   }
 
@@ -617,8 +635,8 @@ modify.Rd.file <- function
   ## This doesn't work if there are quotes in the default values:
   ## gsub(",",paste("\n",paste(rep(" ",l=nchar(N)-1),collapse="")),utxt)
 
-  ## convert to dos line endings to avoid problems with svn
-  txt <- gsub("(?<!\r)\n","\r\n",txt,perl=TRUE)
+  ## convert to unix line endings to avoid problems with svn
+  txt <- gsub("\r\n","\n",txt,perl=TRUE)
   cat(txt,file=f)
-  cat("\n")
+  if(verbose)cat("\n")
 }

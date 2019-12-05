@@ -4,12 +4,13 @@
 \title{lonely}
 \description{List of parser functions that operate on single objects. This list
 is useful for testing these functions.}
-\usage{lonely}
+\usage{"lonely"}
 
 
 
 
 \examples{
+
   f <- function # title
 ### description
   (x, ##<< arg x
@@ -25,4 +26,5 @@ is useful for testing these functions.}
   src <- getSource(f)
   lonely$extract.xxx.chunks(src)
   lonely$prefixed.lines(src)
+
 }

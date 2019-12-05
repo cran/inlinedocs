@@ -1,4 +1,4 @@
-silly.example <- function
+silly.example <- structure(function
 ### this function does nothing in particular and does it very well
 (
  ##title<<Simple function arguments
@@ -28,7 +28,7 @@ silly.example <- function
     res <- list(x=7, ##<< x coordinate
                 z= ##<< z describes everything else
                 ##describe<<
-                list(colour=green, ##<< colour of line
+                list(colour="green", ##<< colour of line
                      width=2),     ##<< width of line
                 ##end<<
                 ## and this line should get into documentation for z
@@ -36,13 +36,17 @@ silly.example <- function
   }
   ##note<< a note
   ##references<< a reference
-  ##seealso<< \code{\link{Silly-class}}
+  ##seealso<< \code{\link{SillyTest-class}}
   ##keyword<<documentation utilities
   invisible(res)
 ### invisible something not unrelated to first
-}
+}, ex=function(){
 
-setClass("Silly", # S4 classes can be documented as well
+  silly.example(1, TRUE)
+
+})
+
+setClass("SillyTest", # S4 classes can be documented as well
 ### The Silly class does nothing much either
          ##details<< Put what you like in documentation details,
          ## but ideally reference construction methods.

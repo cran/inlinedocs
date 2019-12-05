@@ -1,8 +1,12 @@
-\name{getKnownS3generics}
-\alias{getKnownS3generics}
-\title{getKnownS3generics}
-\description{Copied from R-3.0.1, to support getKnownS3generics.}
-\usage{getKnownS3generics()}
+\name{whole.word}
+\alias{whole.word}
+\title{whole word}
+\description{Regex for a whole word to code/link tags.}
+\usage{whole.word(...)}
+\arguments{
+  \item{\dots}{
+}
+}
 
 
 
