@@ -60,12 +60,12 @@ do.not.generate <- structure(function
 
 ### combine NULL objects.
 combine.NULL<-function(x,y){
-    if (class(x) == "NULL"){
+    if (is.null(x)){
         # print(paste("mm x=",x))
         # print(paste("mm class(x)=",class(x)))
         x=list("")
     }
-    if (class(y) == "NULL"){
+    if (is.null(y)){
         # print(paste("mm y=",y))
         # print(paste("mm class(y)=",class(y)))
         y=list("")
@@ -184,6 +184,11 @@ kill.prefix.whitespace <- function
 ### Character vector of code lines with preceding whitespace removed.
 }
 
+### Convert ... to \\dots
+escape_dots <- function(arg){
+  gsub("...", "\\dots", arg, fixed = TRUE)
+}
+
 prefixed.lines <- structure(function(src,...){
 ### The primary mechanism of inline documentation is via consecutive
 ### groups of lines matching the specified prefix regular expression
@@ -226,7 +231,7 @@ prefixed.lines <- structure(function(src,...){
       arg <- gsub("^([^=,]*)[=,].*", "\\1", arg)
       ##twutz: remove trailing whitespaces
       arg <- gsub("^([^ \t]*)([ \t]+)$","\\1",arg)
-      arg <- gsub("...", "\\dots", arg, fixed = TRUE)
+      arg <- escape_dots(arg)
       paste("item{",arg,"}",sep="")
     } else {
       next;
@@ -597,6 +602,12 @@ forfun.parsers <- list(
     if(is.empty(doc$definition) && !is.empty(src))
       list(definition=src)
     else list()
+  },
+  arguments.names=function(o,doc,...){
+    arg.vec <- escape_dots(names(formals(o)))
+    item.vec <- sprintf("item{%s}", arg.vec)
+    has.doc <- item.vec %in% names(doc)
+    structure(as.list(paste0(arg.vec," ")), names=item.vec)[!has.doc]
   })
 
 ### List of Parser Functions that can be applied to any object.
@@ -755,7 +766,7 @@ extra.code.docs <- function # Extract documentation from code chunks
   extract.docs <- function(on){
     res <- try({o <- objs[[on]]
                 extract.docs.try(o, on)},FALSE)
-    if(class(res)=="try-error"){
+    if(inherits(res,"try-error")){
       cat("Failed to extract docs for: ",on,"\n\n")
       list()
     } else if(0 == length(res) && inherits(objs[[on]],"standardGeneric")){
